@@ -24,8 +24,8 @@ let basketball = {
 const court = {
   width: 800,
   height: 600,
-  hoopX: 400, // Center of the court
-  hoopY: 50   // Near the top of the court
+  hoopX: 400, // Center of the court horizontally
+  hoopY: 90    // At the far end of the court (properly positioned)
 };
 
 // Name generator for players
@@ -110,8 +110,8 @@ io.on('connection', (socket) => {
   players[socket.id] = {
     id: socket.id,
     name: generatePlayerName(),
-    x: Math.floor(Math.random() * (court.width - 100) + court.x + 50), // Random position within court bounds
-    y: Math.floor(Math.random() * (court.height - 150) + court.y + 100), // Stay away from the hoop area initially
+    x: Math.random() < 0.5 ? 200 : 600, // Either bottom left or bottom right
+    y: 450, // Near the bottom of the court
     outfit: generateOutfit(),
     hasBall: false,
     score: 0,
@@ -153,14 +153,25 @@ io.on('connection', (socket) => {
     
     player.isJumping = true;
     
-    // Enhance dunk detection - more forgiving to make 3D experience better
-    const hoopProximityX = 70; // Increased proximity for better gameplay
-    const hoopProximityY = 120; // Allow dunking from a bit further away
+    // NBA Jam style dunking - allow dunks from further away
+    const dunkRangeX = 150; // Much wider dunking range horizontally
+    const dunkRangeY = 400; // Extended range for the full court length
     
-    // Check if player can dunk
+    // Check if player can dunk (has ball and is within range)
     if (player.hasBall && 
-        Math.abs(player.x - court.hoopX) < hoopProximityX && 
-        Math.abs(player.y - court.hoopY) < hoopProximityY) {
+        Math.abs(player.x - court.hoopX) < dunkRangeX && 
+        player.y > court.hoopY + 20 && // Must be below the hoop
+        player.y - court.hoopY < dunkRangeY) { // Limited by maximum distance
+      
+      // Store original position for animation
+      const originalPosition = { x: player.x, y: player.y };
+      
+      // Move player to hoop for the dunk (animation will be handled by client)
+      const targetPosition = { 
+        x: court.hoopX, 
+        y: court.hoopY + 15 // Position adjusted for the new hoop location
+      };
+      
       // Player has made a dunk!
       player.score += 2;
       basketball.possessedBy = null;
@@ -175,12 +186,26 @@ io.on('connection', (socket) => {
         playerId: socket.id,
         playerName: player.name,
         playerScore: player.score,
-        dunkPosition: { x: player.x, y: player.y },
+        startPosition: originalPosition,
+        dunkPosition: targetPosition,
         outfitColor: player.outfit.primaryColor
       });
       
       // Broadcast updated basketball position
       io.emit('basketballMoved', basketball);
+      
+      // Reset player position after dunk
+      setTimeout(() => {
+        if (players[socket.id]) {
+          // Return player to a position near where they started, but not exact
+          // to prevent getting stuck in walls
+          player.x = originalPosition.x + (Math.random() - 0.5) * 20;
+          player.y = originalPosition.y + (Math.random() - 0.5) * 20;
+          
+          // Broadcast player's new position
+          io.emit('playerMoved', player);
+        }
+      }, 800);
     }
     
     // Broadcast jump

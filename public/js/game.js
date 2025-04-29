@@ -1,8 +1,74 @@
-// Canvas setup
+// Start a dynamic dunk animation
+function startDunkAnimation(player, startPos, endPos, callback) {
+  dunkAnimations.active = true;
+  dunkAnimations.player = player;
+  dunkAnimations.startTime = Date.now();
+  dunkAnimations.startPosition = startPos;
+  dunkAnimations.endPosition = endPos;
+  dunkAnimations.callback = callback;
+  
+  // Save original player position to restore later
+  player.originalPosition = { x: player.x, y: player.y };
+  
+  // Add special "dunking" flag for animation
+  player.isDunking = true;
+}
+
+// Update dunk animation each frame
+function updateDunkAnimation() {
+  if (!dunkAnimations.active) return;
+  
+  const elapsed = Date.now() - dunkAnimations.startTime;
+  const progress = Math.min(1, elapsed / dunkAnimations.duration);
+  const player = dunkAnimations.player;
+  
+  if (!player) {
+    dunkAnimations.active = false;
+    return;
+  }
+  
+  // Calculate position along arc path
+  // Use easeInOutQuad for smoother animation
+  let t = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+  
+  // Linear interpolation from start to end position
+  player.x = dunkAnimations.startPosition.x + (dunkAnimations.endPosition.x - dunkAnimations.startPosition.x) * t;
+  player.y = dunkAnimations.startPosition.y + (dunkAnimations.endPosition.y - dunkAnimations.startPosition.y) * t;
+  
+  // Add vertical arc (parabola) for jumping effect
+  // Sin curve for arc, peaking at the middle of the animation
+  const verticalOffset = Math.sin(progress * Math.PI) * dunkAnimations.arcHeight;
+  player.y -= verticalOffset;
+  
+  // Animation complete
+  if (progress === 1) {
+    dunkAnimations.active = false;
+    player.isDunking = false;
+    
+    // Execute callback if provided
+    if (dunkAnimations.callback) {
+      dunkAnimations.callback();
+    }
+  }
+}// Canvas setup
 const canvas = document.getElementById('game-canvas');
 const ctx = canvas.getContext('2d');
 canvas.width = 800;
 canvas.height = 600;
+
+// Dunk animation and visual effects
+const dunkAnimations = {
+  active: false,
+  player: null,
+  startTime: 0,
+  duration: 900, // Slightly longer duration for more dramatic effect
+  startPosition: { x: 0, y: 0 },
+  endPosition: { x: 0, y: 0 },
+  arcHeight: 220, // Increased height for more impressive long-distance dunks
+  callback: null
+};
+
+
 
 // Camera shake variables
 let cameraShake = {
@@ -18,6 +84,60 @@ function addCameraShake(duration = 500, intensity = 10) {
   cameraShake.duration = duration;
   cameraShake.intensity = intensity;
   cameraShake.startTime = Date.now();
+}
+
+// Start a dynamic dunk animation
+function startDunkAnimation(player, startPos, endPos, callback) {
+  dunkAnimations.active = true;
+  dunkAnimations.player = player;
+  dunkAnimations.startTime = Date.now();
+  dunkAnimations.startPosition = startPos;
+  dunkAnimations.endPosition = endPos;
+  dunkAnimations.callback = callback;
+  
+  // Save original player position to restore later
+  player.originalPosition = { x: player.x, y: player.y };
+  
+  // Add special "dunking" flag for animation
+  player.isDunking = true;
+}
+
+// Update dunk animation each frame
+function updateDunkAnimation() {
+  if (!dunkAnimations.active) return;
+  
+  const elapsed = Date.now() - dunkAnimations.startTime;
+  const progress = Math.min(1, elapsed / dunkAnimations.duration);
+  const player = dunkAnimations.player;
+  
+  if (!player) {
+    dunkAnimations.active = false;
+    return;
+  }
+  
+  // Calculate position along arc path
+  // Use easeInOutQuad for smoother animation
+  let t = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
+  
+  // Linear interpolation from start to end position
+  player.x = dunkAnimations.startPosition.x + (dunkAnimations.endPosition.x - dunkAnimations.startPosition.x) * t;
+  player.y = dunkAnimations.startPosition.y + (dunkAnimations.endPosition.y - dunkAnimations.startPosition.y) * t;
+  
+  // Add vertical arc (parabola) for jumping effect
+  // Sin curve for arc, peaking at the middle of the animation
+  const verticalOffset = Math.sin(progress * Math.PI) * dunkAnimations.arcHeight;
+  player.y -= verticalOffset;
+  
+  // Animation complete
+  if (progress === 1) {
+    dunkAnimations.active = false;
+    player.isDunking = false;
+    
+    // Execute callback if provided
+    if (dunkAnimations.callback) {
+      dunkAnimations.callback();
+    }
+  }
 }
 
 // Connect to server
@@ -201,6 +321,14 @@ function initSocketEvents() {
     }
     
     basketball = updatedBasketball;
+    
+    // Ensure all players' hasBall property is updated when ball moves
+    // This fixes the issue where ball icon stays on player after dunking
+    if (!updatedBasketball.possessedBy) {
+      Object.keys(players).forEach(id => {
+        players[id].hasBall = false;
+      });
+    }
   });
   
   // Player dunked
@@ -208,13 +336,27 @@ function initSocketEvents() {
     if (players[data.playerId]) {
       players[data.playerId].score = data.playerScore;
       
+      // Make sure to update the ball possession state
+      players[data.playerId].hasBall = false;
+      
       // Update UI if it's the current player
       if (data.playerId === myPlayerId) {
         document.getElementById('player-score').textContent = data.playerScore;
       }
       
-      // Show dunk animation/effect with 3D visuals
-      showDunkEffect(players[data.playerId], court.hoopX, court.hoopY);
+      // Show NBA Jam style dunk animation with path from start to rim
+      showDunkEffect(
+        players[data.playerId], 
+        data.startPosition, 
+        data.dunkPosition, 
+        court.hoopX, 
+        court.hoopY
+      );
+      
+      // Force update all players to not have the ball after a dunk
+      Object.keys(players).forEach(id => {
+        players[id].hasBall = false;
+      });
       
       // Update scoreboard
       updateScoreboard();
@@ -277,7 +419,13 @@ function attemptJump() {
 }
 
 // Show dunk effect/animation
-function showDunkEffect(player, hoopX, hoopY) {
+function showDunkEffect(player, startPosition, dunkPosition, hoopX, hoopY) {
+  // Start dynamic dunk animation
+  startDunkAnimation(player, startPosition, dunkPosition, () => {
+    // This will run when the animation completes
+    console.log('Dunk animation completed');
+  });
+  
   // Create visual effects using the particle system
   if (window.particleEffects) {
     // Create dunk celebration effect at the hoop position
@@ -290,11 +438,23 @@ function showDunkEffect(player, hoopX, hoopY) {
     window.particleEffects.createNetMovementEffect(hoopX, hoopY);
     
     // Add camera shake effect
-    addCameraShake();
+    addCameraShake(300, 15); // Shorter but more intense shake
     
     // Play dunk sound effects
     if (window.SoundManager) {
       window.SoundManager.playDunkEffect();
+    }
+    
+    // Add special trail effect behind the player
+    const trailColor = player.outfit.primaryColor;
+    const trailCount = 15;
+    for (let i = 0; i < trailCount; i++) {
+      setTimeout(() => {
+        if (window.particleEffects && player) {
+          // Create trail particles at player's current position during the dunk
+          window.particleEffects.createTrailEffect(player.x, player.y, trailColor);
+        }
+      }, i * (dunkAnimations.duration / trailCount));
     }
   } else {
     console.log('Dunk effect!'); // Fallback if particle system not available
@@ -448,98 +608,140 @@ function drawCourt() {
   ctx.lineTo(bottomRight.x, centerY);
   ctx.stroke();
   
-  // Draw 3D hoop at top center
-  // Backboard position
+  // Draw 3D hoop at the far edge of the court
+  // Calculate proper perspective position for the far edge
   const backboardWidth = topWidth * 0.4;
-  const backboardHeight = courtDepth * 0.08;
+  const backboardHeight = courtDepth * 0.1;
   const backboardX = centerX - backboardWidth / 2;
-  const backboardY = courtY + courtDepth * 0.05; // Just below top edge of court
+  const backboardY = topLeft.y - 5; // Position slightly above the far edge for visibility
   
+  // Draw the backboard support base on the court floor
+  const baseWidth = 30;
+  const baseHeight = 10;
+  const baseX = centerX - baseWidth / 2;
+  const baseY = topLeft.y;
+  
+  // Base shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+  ctx.fillRect(baseX + 2, baseY + 2, baseWidth, baseHeight);
+  
+  // Base itself
+  ctx.fillStyle = '#555';
+  ctx.fillRect(baseX, baseY, baseWidth, baseHeight);
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(baseX, baseY, baseWidth, baseHeight);
+  
+  // Draw backboard support pole (vertical)
+  const poleWidth = 10;
+  const poleHeight = 40; // Shorter pole to fit perspective
+  const poleX = centerX - poleWidth / 2;
+  const poleY = baseY - poleHeight; // Start from the base and go up
+  
+  // Pole shadow
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.fillRect(poleX + 2, poleY, poleWidth, poleHeight);
+  
+  // Main pole
+  const poleGradient = ctx.createLinearGradient(poleX, poleY, poleX + poleWidth, poleY);
+  poleGradient.addColorStop(0, '#888');
+  poleGradient.addColorStop(0.5, '#ddd');
+  poleGradient.addColorStop(1, '#888');
+  ctx.fillStyle = poleGradient;
+  ctx.fillRect(poleX, poleY, poleWidth, poleHeight);
+  
+  // Pole outline
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(poleX, poleY, poleWidth, poleHeight);
+  
+  // Backboard - positioned at the top of the pole
   // Backboard shadow (for depth)
   ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(backboardX + 3, backboardY + 3, backboardWidth, backboardHeight);
+  ctx.fillRect(backboardX + 2, poleY - backboardHeight, backboardWidth, backboardHeight);
   
   // Main backboard
   ctx.fillStyle = '#fff';
-  ctx.fillRect(backboardX, backboardY, backboardWidth, backboardHeight);
+  ctx.fillRect(backboardX, poleY - backboardHeight, backboardWidth, backboardHeight);
   
   // Backboard depth (3D effect)
   ctx.fillStyle = '#ddd';
   ctx.beginPath();
-  ctx.moveTo(backboardX, backboardY);
-  ctx.lineTo(backboardX - 5, backboardY - 5);
-  ctx.lineTo(backboardX + backboardWidth - 5, backboardY - 5);
-  ctx.lineTo(backboardX + backboardWidth, backboardY);
+  ctx.moveTo(backboardX, poleY - backboardHeight);
+  ctx.lineTo(backboardX - 3, poleY - backboardHeight - 3);
+  ctx.lineTo(backboardX + backboardWidth - 3, poleY - backboardHeight - 3);
+  ctx.lineTo(backboardX + backboardWidth, poleY - backboardHeight);
   ctx.closePath();
   ctx.fill();
   
   // Backboard outline
   ctx.strokeStyle = '#999';
   ctx.lineWidth = 1;
-  ctx.strokeRect(backboardX, backboardY, backboardWidth, backboardHeight);
+  ctx.strokeRect(backboardX, poleY - backboardHeight, backboardWidth, backboardHeight);
   
   // Add backboard target box
   ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
   ctx.lineWidth = 1;
   const targetSize = backboardHeight * 0.6;
   const targetX = backboardX + (backboardWidth - targetSize) / 2;
-  const targetY = backboardY + (backboardHeight - targetSize) / 2;
+  const targetY = poleY - backboardHeight + (backboardHeight - targetSize) / 2;
   ctx.strokeRect(targetX, targetY, targetSize, targetSize);
   
   // Draw the rim with perspective (ellipse)
   const rimX = centerX;
-  const rimY = backboardY + backboardHeight + 10;
-  const rimRadiusX = 15;
-  const rimRadiusY = 5; // Flatter for perspective
+  const rimY = poleY - backboardHeight + backboardHeight * 0.8; // Position rim lower on backboard for proper perspective
+  const rimRadiusX = 12;
+  const rimRadiusY = 3; // Flatter for perspective
   
   // Rim shadow
   ctx.beginPath();
-  ctx.ellipse(rimX + 2, rimY + 2, rimRadiusX, rimRadiusY, 0, 0, Math.PI, false);
+  ctx.ellipse(rimX + 1, rimY + 1, rimRadiusX, rimRadiusY, 0, 0, Math.PI, false);
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2;
   ctx.stroke();
   
   // Actual rim
   ctx.beginPath();
   ctx.ellipse(rimX, rimY, rimRadiusX, rimRadiusY, 0, 0, Math.PI, false);
   ctx.strokeStyle = '#ff0000';
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2;
   ctx.stroke();
   
   // Add rim supports
   ctx.beginPath();
   ctx.moveTo(rimX - rimRadiusX, rimY);
-  ctx.lineTo(backboardX + backboardWidth * 0.3, backboardY + backboardHeight);
+  ctx.lineTo(backboardX + backboardWidth * 0.3, poleY - backboardHeight + backboardHeight * 0.6);
   ctx.moveTo(rimX + rimRadiusX, rimY);
-  ctx.lineTo(backboardX + backboardWidth * 0.7, backboardY + backboardHeight);
+  ctx.lineTo(backboardX + backboardWidth * 0.7, poleY - backboardHeight + backboardHeight * 0.6);
   ctx.strokeStyle = '#aaa';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1;
   ctx.stroke();
   
-  // Draw net (simplified)
+  // Draw net (simplified for the perspective)
   ctx.beginPath();
   // Left side of net
   ctx.moveTo(rimX - rimRadiusX, rimY);
-  ctx.lineTo(rimX - rimRadiusX * 0.5, rimY + 25);
+  ctx.lineTo(rimX - rimRadiusX * 0.5, rimY + 15);
   // Right side of net
   ctx.moveTo(rimX + rimRadiusX, rimY);
-  ctx.lineTo(rimX + rimRadiusX * 0.5, rimY + 25);
+  ctx.lineTo(rimX + rimRadiusX * 0.5, rimY + 15);
   // Bottom of net
-  ctx.moveTo(rimX - rimRadiusX * 0.5, rimY + 25);
-  ctx.lineTo(rimX + rimRadiusX * 0.5, rimY + 25);
+  ctx.moveTo(rimX - rimRadiusX * 0.5, rimY + 15);
+  ctx.lineTo(rimX + rimRadiusX * 0.5, rimY + 15);
+  
   // Vertical net lines
   const netSegments = 5;
   for (let i = 1; i < netSegments; i++) {
     const segX = rimX - rimRadiusX + (2 * rimRadiusX * i) / netSegments;
     ctx.moveTo(segX, rimY);
     const bottomX = rimX - rimRadiusX * 0.5 + rimRadiusX * i / netSegments;
-    ctx.lineTo(bottomX, rimY + 25);
+    ctx.lineTo(bottomX, rimY + 15);
   }
   
   // Horizontal net lines
-  for (let i = 1; i < 3; i++) {
-    const y = rimY + i * 8;
-    const widthRatio = i / 3;
+  for (let i = 1; i < 2; i++) {
+    const y = rimY + i * 6;
+    const widthRatio = i / 2;
     const leftX = rimX - rimRadiusX + (rimRadiusX * 0.5 * widthRatio);
     const rightX = rimX + rimRadiusX - (rimRadiusX * 0.5 * widthRatio);
     
@@ -548,7 +750,7 @@ function drawCourt() {
   }
   
   ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 0.5;
   ctx.stroke();
   
   // Store the court dimensions for gameplay
@@ -1010,10 +1212,15 @@ function gameLoop() {
     }
   }
   
-  // Update player position
-  if (players[myPlayerId]) {
+  // Update dunk animations if active
+  if (dunkAnimations.active) {
+    updateDunkAnimation();
+  }
+  
+  // Update player position (only if not in dunk animation)
+  if (players[myPlayerId] && !dunkAnimations.active) {
     updatePlayerPosition();
-  } else {
+  } else if (!players[myPlayerId]) {
     // Debug: We don't have player ID yet
     ctx.fillStyle = '#804000';
     ctx.fillRect(0, 0, canvas.width, canvas.height);

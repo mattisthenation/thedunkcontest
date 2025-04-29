@@ -240,6 +240,56 @@ function createNetMovementEffect(rimX, rimY) {
   }
 }
 
+// Create trail effect behind dunking player (NBA Jam style)
+function createTrailEffect(x, y, playerColor) {
+  // Number of particles per trail emission
+  const particleCount = 8;
+  
+  // Create particles in trail pattern
+  for (let i = 0; i < particleCount; i++) {
+    // Random angle with a bias to create a trailing effect
+    const angle = Math.PI + (Math.random() - 0.5) * 1.5; // Mostly backward
+    const speed = 0.5 + Math.random() * 2;
+    
+    // Calculate velocity for trailing effect
+    const velocity = {
+      x: Math.cos(angle) * speed,
+      y: Math.sin(angle) * speed
+    };
+    
+    // Create color variants based on player color
+    let color;
+    if (i % 3 === 0) {
+      color = '#FFFFFF'; // White
+    } else if (i % 3 === 1) {
+      color = playerColor; // Player color
+    } else {
+      // Create a brighter version of player color
+      const r = parseInt(playerColor.slice(1, 3), 16);
+      const g = parseInt(playerColor.slice(3, 5), 16);
+      const b = parseInt(playerColor.slice(5, 7), 16);
+      
+      // Brighten color
+      const brightenFactor = 0.7;
+      const rBright = Math.min(255, Math.floor(r + (255 - r) * brightenFactor));
+      const gBright = Math.min(255, Math.floor(g + (255 - g) * brightenFactor));
+      const bBright = Math.min(255, Math.floor(b + (255 - b) * brightenFactor));
+      
+      color = `#${rBright.toString(16).padStart(2, '0')}${gBright.toString(16).padStart(2, '0')}${bBright.toString(16).padStart(2, '0')}`;
+    }
+    
+    // Randomize size and decay
+    const size = 2 + Math.random() * 6;
+    const decay = 0.03 + Math.random() * 0.05; // Faster decay than normal particles
+    
+    // Create the particle with minimal gravity
+    const particle = new Particle(x, y, color, velocity, 0.05, size, decay, Math.random() * 0.2 - 0.1);
+    
+    // Add to the global particles array
+    particles.push(particle);
+  }
+}
+
 // Update all particles
 function updateParticles() {
   // Keep only active particles
@@ -256,6 +306,7 @@ window.particleEffects = {
   createDunkEffect,
   createRimShakeEffect,
   createNetMovementEffect,
+  createTrailEffect,
   updateParticles,
   drawParticles
 };
