@@ -15,8 +15,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Game state
 const players = {};
 let basketball = {
-  x: 400,
-  y: 300,
+  x: 400, // Center of court
+  y: 350, // Middle of court (adjusted for perspective)
   possessedBy: null
 };
 
@@ -50,18 +50,42 @@ function generatePlayerName() {
 
 // Function to generate random outfit
 function generateOutfit() {
-  const outfitTypes = ["professional", "street", "retro", "colorful", "team"];
-  const colors = ["red", "blue", "green", "purple", "orange", "yellow", "black", "white"];
+  // Basketball team colors
+  const teamColorSchemes = [
+    { primary: '#CE1141', secondary: '#000000' }, // Chicago Bulls
+    { primary: '#552583', secondary: '#FDB927' }, // LA Lakers
+    { primary: '#006BB6', secondary: '#F58426' }, // NY Knicks
+    { primary: '#007A33', secondary: '#FFFFFF' }, // Boston Celtics
+    { primary: '#1D428A', secondary: '#FFC72C' }, // Golden State Warriors
+    { primary: '#0C2340', secondary: '#C8102E' }, // Washington Wizards
+    { primary: '#0E2240', secondary: '#FEC524' }, // Denver Nuggets
+    { primary: '#1D1160', secondary: '#E56020' }, // Phoenix Suns
+    { primary: '#00538C', secondary: '#B8C4CA' }, // Dallas Mavericks
+    { primary: '#5A2D81', secondary: '#63727A' }  // Sacramento Kings
+  ];
   
-  const outfitType = outfitTypes[Math.floor(Math.random() * outfitTypes.length)];
-  const primaryColor = colors[Math.floor(Math.random() * colors.length)];
-  const secondaryColor = colors[Math.floor(Math.random() * colors.length)];
+  // Basketball outfit styles
+  const outfitTypes = [
+    "professional", // Standard NBA-style uniform
+    "street",       // Street basketball style
+    "retro",        // Old-school basketball uniform
+    "colorful",     // Bright, eye-catching uniform
+    "team"          // Team-specific style
+  ];
+  
+  // Select a random team color scheme
+  const colorScheme = randomChoice(teamColorSchemes);
   
   return {
-    type: outfitType,
-    primaryColor: primaryColor,
-    secondaryColor: secondaryColor
+    type: randomChoice(outfitTypes),
+    primaryColor: colorScheme.primary,
+    secondaryColor: colorScheme.secondary
   };
+}
+
+// Helper function to pick a random item from an array
+function randomChoice(array) {
+  return array[Math.floor(Math.random() * array.length)];
 }
 
 // Socket.io connection handling
@@ -86,8 +110,8 @@ io.on('connection', (socket) => {
   players[socket.id] = {
     id: socket.id,
     name: generatePlayerName(),
-    x: Math.floor(Math.random() * court.width),
-    y: Math.floor(Math.random() * court.height),
+    x: Math.floor(Math.random() * (court.width - 100) + court.x + 50), // Random position within court bounds
+    y: Math.floor(Math.random() * (court.height - 150) + court.y + 100), // Stay away from the hoop area initially
     outfit: generateOutfit(),
     hasBall: false,
     score: 0,
@@ -129,22 +153,30 @@ io.on('connection', (socket) => {
     
     player.isJumping = true;
     
+    // Enhance dunk detection - more forgiving to make 3D experience better
+    const hoopProximityX = 70; // Increased proximity for better gameplay
+    const hoopProximityY = 120; // Allow dunking from a bit further away
+    
     // Check if player can dunk
-    if (player.hasBall && Math.abs(player.x - court.hoopX) < 50 && Math.abs(player.y - court.hoopY) < 100) {
+    if (player.hasBall && 
+        Math.abs(player.x - court.hoopX) < hoopProximityX && 
+        Math.abs(player.y - court.hoopY) < hoopProximityY) {
       // Player has made a dunk!
       player.score += 2;
       basketball.possessedBy = null;
       player.hasBall = false;
       
-      // Reset basketball position
-      basketball.x = court.width / 2;
-      basketball.y = court.height / 2;
+      // Reset basketball position with slight randomization for better 3D feel
+      basketball.x = court.width / 2 + (Math.random() - 0.5) * 50;
+      basketball.y = court.height / 2 + (Math.random() - 0.5) * 50;
       
-      // Broadcast dunk
+      // Broadcast dunk with extra data for 3D effects
       io.emit('playerDunked', {
         playerId: socket.id,
         playerName: player.name,
-        playerScore: player.score
+        playerScore: player.score,
+        dunkPosition: { x: player.x, y: player.y },
+        outfitColor: player.outfit.primaryColor
       });
       
       // Broadcast updated basketball position
