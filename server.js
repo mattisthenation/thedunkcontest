@@ -68,6 +68,20 @@ function generateOutfit() {
 io.on('connection', (socket) => {
   console.log('New player connected:', socket.id);
   
+  // Log active connections
+  const connectionCount = io.sockets.sockets.size;
+  console.log(`Total active connections: ${connectionCount}`);
+  
+  // Handle test messages (for debugging)
+  socket.on('test', (data) => {
+    console.log('Received test message:', data);
+    socket.emit('testResponse', { 
+      message: 'Test response from server', 
+      receivedAt: new Date().toISOString(),
+      playerCount: Object.keys(players).length
+    });
+  });
+  
   // Add player to game state
   players[socket.id] = {
     id: socket.id,
@@ -182,6 +196,12 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log('Player disconnected:', socket.id);
     
+    // Check if player exists before attempting to handle disconnection
+    if (!players[socket.id]) {
+      console.log('Warning: Player', socket.id, 'disconnected but not found in players list');
+      return;
+    }
+    
     // If disconnecting player had the ball, reset ball position
     if (basketball.possessedBy === socket.id) {
       basketball.possessedBy = null;
@@ -192,8 +212,14 @@ io.on('connection', (socket) => {
       io.emit('basketballMoved', basketball);
     }
     
+    // Log player info before removal
+    console.log('Removing player data:', players[socket.id]);
+    
     // Remove player from game state
     delete players[socket.id];
+    
+    // Log remaining players
+    console.log('Remaining player count:', Object.keys(players).length);
     
     // Notify all players about the disconnected player
     io.emit('playerDisconnected', socket.id);

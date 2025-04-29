@@ -103,11 +103,21 @@ function initEventListeners() {
 function initSocketEvents() {
   // Initial game state
   socket.on('gameState', (gameState) => {
+    console.log('Received initial game state:', gameState);
+    
     players = gameState.players;
     basketball = gameState.basketball;
     court = gameState.court;
     myPlayerId = socket.id;
+    
+    if (!players[myPlayerId]) {
+      console.error('Player data not found for ID:', myPlayerId);
+      alert('Error initializing player data. Please refresh the page.');
+      return;
+    }
+    
     myPlayerName = players[myPlayerId].name;
+    console.log('My player initialized:', players[myPlayerId]);
     
     // Update UI with player name
     document.getElementById('player-name').textContent = myPlayerName;
@@ -435,6 +445,26 @@ function gameLoop() {
   // Update player position
   if (players[myPlayerId]) {
     updatePlayerPosition();
+  } else {
+    // Debug: We don't have player ID yet
+    ctx.fillStyle = '#804000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Waiting for player initialization...', canvas.width/2, canvas.height/2);
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+  
+  // Debug: Log game state occasionally
+  if (Math.random() < 0.01) { // Log roughly every 100 frames
+    console.log('Game state:', {
+      playerCount: Object.keys(players).length,
+      myPlayer: players[myPlayerId],
+      basketball: basketball,
+      court: court
+    });
   }
   
   // Draw game elements
@@ -448,8 +478,26 @@ function gameLoop() {
 
 // Initialize the game
 function init() {
+  console.log('Game initializing...');
+  
+  // Make sure canvas is properly set up
+  canvas.width = 800;
+  canvas.height = 600;
+  
+  // Draw loading message
+  ctx.fillStyle = '#804000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'white';
+  ctx.font = '30px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText('Connecting to game server...', canvas.width/2, canvas.height/2);
+  
+  // Initialize game components
   initEventListeners();
   initSocketEvents();
+  
+  // Start the game loop
+  console.log('Starting game loop');
   gameLoop();
 }
 
