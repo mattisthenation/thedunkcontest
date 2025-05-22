@@ -12,6 +12,17 @@ const io = socketIO(server);
 // Serve static files from the public directory
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Serve node_modules for client-side imports
+app.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
+
+// Configure Express to serve ES modules with the correct MIME type
+app.use((req, res, next) => {
+  if (req.path.endsWith('.js')) {
+    res.type('application/javascript');
+  }
+  next();
+});
+
 // Game state
 const players = {};
 let basketball = {
