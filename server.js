@@ -1,301 +1,347 @@
+// server.js - Game server for The Dunk Contest
+
 const express = require('express');
 const http = require('http');
 const socketIO = require('socket.io');
 const path = require('path');
-const { v4: uuidv4 } = require('uuid');
 
-// Create the Express app
 const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Serve node_modules for client-side imports
-app.use('/node_modules', express.static(path.join(__dirname, 'node_modules')));
-
-// Configure Express to serve ES modules with the correct MIME type
-app.use((req, res, next) => {
-  if (req.path.endsWith('.js')) {
-    res.type('application/javascript');
-  }
-  next();
-});
+// Serve static files
+app.use(express.static('public'));
 
 // Game state
-const players = {};
-let basketball = {
-  x: 400, // Center of court
-  y: 350, // Middle of court (adjusted for perspective)
-  possessedBy: null
+const gameState = {
+    players: {},
+    ball: {
+        position: { x: 0, y: 0.3, z: 0 },  // Changed from y: 1 to y: 0.3 (ground level)
+        velocity: { x: 0, y: 0, z: 0 },
+        carrier: null,
+        inFlight: false,
+        targetHoop: null,
+        willScore: false,
+        shooter: null
+    },
+    scores: {}
 };
 
-// Court dimensions
-const court = {
-  width: 800,
-  height: 600,
-  hoopX: 400, // Center of the court horizontally
-  hoopY: 90    // At the far end of the court (properly positioned)
-};
+// Player name generator
+const firstNames = ['Thunder', 'Lightning', 'Fire', 'Ice', 'Shadow', 'Phoenix', 'Storm', 'Blaze'];
+const lastNames = ['Slam', 'Dunk', 'Jam', 'Break', 'Crash', 'Force', 'Power', 'Strike'];
 
-// Name generator for players
 function generatePlayerName() {
-  const firstNames = [
-    "Michael", "LeBron", "Kobe", "Shaquille", "Stephen", "Kevin", "James", 
-    "Giannis", "Damian", "Kyrie", "Kawhi", "Anthony", "Luka", "Nikola", 
-    "Joel", "Jayson", "Devin", "Donovan", "Zion", "Trae", "Ja", "Zach",
-    "Bradley", "Jimmy", "Russell", "Chris", "Paul", "Karl", "Julius"
-  ];
-  
-  const lastNames = [
-    "Jordan", "James", "Bryant", "O'Neal", "Curry", "Durant", "Harden",
-    "Antetokounmpo", "Lillard", "Irving", "Leonard", "Davis", "Doncic", 
-    "Jokic", "Embiid", "Tatum", "Booker", "Mitchell", "Williamson", 
-    "Young", "Morant", "LaVine", "Beal", "Butler", "Westbrook", "Paul",
-    "George", "Towns", "Randle", "Thompson", "Wade", "Johnson"
-  ];
-  
-  return `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+    const first = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const last = lastNames[Math.floor(Math.random() * lastNames.length)];
+    return `${first} ${last}`;
 }
 
-// Function to generate random outfit
-function generateOutfit() {
-  // Basketball team colors
-  const teamColorSchemes = [
-    { primary: '#CE1141', secondary: '#000000' }, // Chicago Bulls
-    { primary: '#552583', secondary: '#FDB927' }, // LA Lakers
-    { primary: '#006BB6', secondary: '#F58426' }, // NY Knicks
-    { primary: '#007A33', secondary: '#FFFFFF' }, // Boston Celtics
-    { primary: '#1D428A', secondary: '#FFC72C' }, // Golden State Warriors
-    { primary: '#0C2340', secondary: '#C8102E' }, // Washington Wizards
-    { primary: '#0E2240', secondary: '#FEC524' }, // Denver Nuggets
-    { primary: '#1D1160', secondary: '#E56020' }, // Phoenix Suns
-    { primary: '#00538C', secondary: '#B8C4CA' }, // Dallas Mavericks
-    { primary: '#5A2D81', secondary: '#63727A' }  // Sacramento Kings
-  ];
-  
-  // Basketball outfit styles
-  const outfitTypes = [
-    "professional", // Standard NBA-style uniform
-    "street",       // Street basketball style
-    "retro",        // Old-school basketball uniform
-    "colorful",     // Bright, eye-catching uniform
-    "team"          // Team-specific style
-  ];
-  
-  // Select a random team color scheme
-  const colorScheme = randomChoice(teamColorSchemes);
-  
-  return {
-    type: randomChoice(outfitTypes),
-    primaryColor: colorScheme.primary,
-    secondaryColor: colorScheme.secondary
-  };
-}
-
-// Helper function to pick a random item from an array
-function randomChoice(array) {
-  return array[Math.floor(Math.random() * array.length)];
-}
+// Team colors for variety
+const teamColors = [
+    { primary: '#FF0000', secondary: '#FFFFFF' }, // Red/White
+    { primary: '#0080FF', secondary: '#FFFFFF' }, // Blue/White
+    { primary: '#00FF00', secondary: '#000000' }, // Green/Black
+    { primary: '#FFD700', secondary: '#000080' }, // Gold/Navy
+    { primary: '#FF00FF', secondary: '#FFFF00' }, // Magenta/Yellow
+    { primary: '#00FFFF', secondary: '#FF00FF' }, // Cyan/Magenta
+    { primary: '#FF4500', secondary: '#000000' }, // Orange/Black
+    { primary: '#800080', secondary: '#FFD700' }  // Purple/Gold
+];
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
-  console.log('New player connected:', socket.id);
-  
-  // Log active connections
-  const connectionCount = io.sockets.sockets.size;
-  console.log(`Total active connections: ${connectionCount}`);
-  
-  // Handle test messages (for debugging)
-  socket.on('test', (data) => {
-    console.log('Received test message:', data);
-    socket.emit('testResponse', { 
-      message: 'Test response from server', 
-      receivedAt: new Date().toISOString(),
-      playerCount: Object.keys(players).length
-    });
-  });
-  
-  // Add player to game state
-  players[socket.id] = {
-    id: socket.id,
-    name: generatePlayerName(),
-    x: Math.random() < 0.5 ? 200 : 600, // Either bottom left or bottom right
-    y: 450, // Near the bottom of the court
-    outfit: generateOutfit(),
-    hasBall: false,
-    score: 0,
-    isJumping: false
-  };
-  
-  // Send current game state to the new player
-  socket.emit('gameState', {
-    players: players,
-    basketball: basketball,
-    court: court
-  });
-  
-  // Notify all players about the new player
-  socket.broadcast.emit('playerJoined', players[socket.id]);
-  
-  // Handle player movement
-  socket.on('playerMovement', (movementData) => {
-    const player = players[socket.id];
-    if (!player) return;
-    
-    player.x = movementData.x;
-    player.y = movementData.y;
-    
-    // If player has the ball, move the ball with the player
-    if (basketball.possessedBy === socket.id) {
-      basketball.x = player.x;
-      basketball.y = player.y - 10; // Slightly above the player
-    }
-    
-    // Emit player movement to all other players
-    socket.broadcast.emit('playerMoved', player);
-  });
-  
-  // Handle player jumping
-  socket.on('playerJump', () => {
-    const player = players[socket.id];
-    if (!player || player.isJumping) return;
-    
-    player.isJumping = true;
-    
-    // NBA Jam style dunking - allow dunks from further away
-    const dunkRangeX = 150; // Much wider dunking range horizontally
-    const dunkRangeY = 400; // Extended range for the full court length
-    
-    // Check if player can dunk (has ball and is within range)
-    if (player.hasBall && 
-        Math.abs(player.x - court.hoopX) < dunkRangeX && 
-        player.y > court.hoopY + 20 && // Must be below the hoop
-        player.y - court.hoopY < dunkRangeY) { // Limited by maximum distance
-      
-      // Store original position for animation
-      const originalPosition = { x: player.x, y: player.y };
-      
-      // Move player to hoop for the dunk (animation will be handled by client)
-      const targetPosition = { 
-        x: court.hoopX, 
-        y: court.hoopY + 15 // Position adjusted for the new hoop location
-      };
-      
-      // Player has made a dunk!
-      player.score += 2;
-      basketball.possessedBy = null;
-      player.hasBall = false;
-      
-      // Reset basketball position with slight randomization for better 3D feel
-      basketball.x = court.width / 2 + (Math.random() - 0.5) * 50;
-      basketball.y = court.height / 2 + (Math.random() - 0.5) * 50;
-      
-      // Broadcast dunk with extra data for 3D effects
-      io.emit('playerDunked', {
+    console.log('Player connected:', socket.id);
+
+    // Create new player
+    const player = {
+        id: socket.id,
+        name: generatePlayerName(),
+        position: { 
+            x: (Math.random() - 0.5) * 10, 
+            y: 0, 
+            z: (Math.random() - 0.5) * 10 
+        },
+        velocity: { x: 0, y: 0, z: 0 },
+        animation: 'idle',
+        facingDirection: 1,
+        teamColors: teamColors[Math.floor(Math.random() * teamColors.length)],
+        jerseyNumber: Math.floor(Math.random() * 99) + 1,
+        hasBall: false
+    };
+
+    // Add player to game state
+    gameState.players[socket.id] = player;
+    gameState.scores[socket.id] = 0;
+
+    // Send initial data to the new player
+    socket.emit('initialize', {
         playerId: socket.id,
-        playerName: player.name,
-        playerScore: player.score,
-        startPosition: originalPosition,
-        dunkPosition: targetPosition,
-        outfitColor: player.outfit.primaryColor
-      });
-      
-      // Broadcast updated basketball position
-      io.emit('basketballMoved', basketball);
-      
-      // Reset player position after dunk
-      setTimeout(() => {
-        if (players[socket.id]) {
-          // Return player to a position near where they started, but not exact
-          // to prevent getting stuck in walls
-          player.x = originalPosition.x + (Math.random() - 0.5) * 20;
-          player.y = originalPosition.y + (Math.random() - 0.5) * 20;
-          
-          // Broadcast player's new position
-          io.emit('playerMoved', player);
+        gameState: gameState
+    });
+
+    // Notify other players
+    socket.broadcast.emit('playerJoined', player);
+
+    // Handle player movement
+    socket.on('move', (data) => {
+        if (gameState.players[socket.id]) {
+            gameState.players[socket.id].position = data.position;
+            gameState.players[socket.id].velocity = data.velocity;
+            gameState.players[socket.id].animation = data.animation;
+            gameState.players[socket.id].facingDirection = data.facingDirection;
+
+            // If player has ball, move ball with player
+            if (gameState.ball.carrier === socket.id) {
+                gameState.ball.position = {
+                    x: data.position.x,
+                    y: data.position.y + 2,
+                    z: data.position.z
+                };
+            }
+
+            // Broadcast to other players
+            socket.broadcast.emit('playerMoved', {
+                playerId: socket.id,
+                position: data.position,
+                velocity: data.velocity,
+                animation: data.animation,
+                facingDirection: data.facingDirection
+            });
         }
-      }, 800);
-    }
-    
-    // Broadcast jump
-    io.emit('playerJumped', {
-      playerId: socket.id
+    });
+
+    // Handle ball pickup
+    socket.on('pickupBall', () => {
+        console.log('Ball pickup attempt by:', socket.id);
+        console.log('Ball carrier:', gameState.ball.carrier);
+        console.log('Ball position:', gameState.ball.position);
+        
+        if (!gameState.ball.carrier) {
+            const player = gameState.players[socket.id];
+            console.log('Player position:', player.position);
+            
+            const ballPos = gameState.ball.position;
+            const distance = Math.sqrt(
+                Math.pow(player.position.x - ballPos.x, 2) +
+                Math.pow(player.position.z - ballPos.z, 2)
+            );
+            
+            console.log('Distance to ball:', distance);
+
+            // Check if player is close enough to pick up ball (increased to 2.5)
+            if (distance < 2.5) {
+                console.log('Pickup successful!');
+                gameState.ball.carrier = socket.id;
+                gameState.players[socket.id].hasBall = true;
+                
+                io.emit('ballPickedUp', {
+                    playerId: socket.id,
+                    ballPosition: gameState.ball.position
+                });
+            } else {
+                console.log('Too far from ball! Need to be within 2.5 units');
+            }
+        } else {
+            console.log('Ball already carried by:', gameState.ball.carrier);
+        }
+    });
+
+    // Handle dunk attempt
+    socket.on('attemptDunk', (data) => {
+        console.log('Dunk attempt received from:', socket.id);
+        console.log('Dunk data:', data);
+        
+        if (gameState.ball.carrier === socket.id) {
+            const player = gameState.players[socket.id];
+            console.log('Player position:', player.position);
+            
+            // Check if near either hoop (hoops at z = -13 and z = 13)
+            const nearLeftHoop = Math.abs(player.position.z - (-13)) < 3 && Math.abs(player.position.x) < 3;
+            const nearRightHoop = Math.abs(player.position.z - 13) < 3 && Math.abs(player.position.x) < 3;
+            
+            console.log('Near left hoop:', nearLeftHoop);
+            console.log('Near right hoop:', nearRightHoop);
+            
+            if (nearLeftHoop || nearRightHoop) {
+                // Successful dunk!
+                gameState.scores[socket.id] += 2;
+                console.log('Dunk successful! Score:', gameState.scores[socket.id]);
+                
+                // Reset ball at random position
+                const randomX = (Math.random() - 0.5) * 16;
+                const randomZ = (Math.random() - 0.5) * 20;
+                gameState.ball.carrier = null;
+                gameState.ball.position = { x: randomX, y: 0.3, z: randomZ };
+                gameState.players[socket.id].hasBall = false;
+                
+                io.emit('dunkScored', {
+                    playerId: socket.id,
+                    playerName: player.name,
+                    score: gameState.scores[socket.id],
+                    dunkType: data.dunkType || 'basic'
+                });
+                
+                io.emit('ballDropped', {
+                    position: gameState.ball.position
+                });
+            } else {
+                console.log('Too far from hoop to dunk');
+            }
+        } else {
+            console.log('Player does not have ball');
+        }
     });
     
-    // Reset jumping state after a delay
-    setTimeout(() => {
-      if (players[socket.id]) {
-        players[socket.id].isJumping = false;
-        io.emit('playerLanded', {
-          playerId: socket.id
-        });
-      }
-    }, 1000);
-  });
-  
-  // Handle player attempting to get the ball
-  socket.on('getBall', () => {
-    const player = players[socket.id];
-    if (!player) return;
-    
-    // Check if ball is not possessed and player is close to the ball
-    if (!basketball.possessedBy && 
-        Math.abs(player.x - basketball.x) < 30 && 
-        Math.abs(player.y - basketball.y) < 30) {
-      
-      basketball.possessedBy = socket.id;
-      player.hasBall = true;
-      
-      // Move the ball with the player
-      basketball.x = player.x;
-      basketball.y = player.y - 10;
-      
-      // Broadcast ball possession
-      io.emit('ballPossession', {
-        playerId: socket.id,
-        basketball: basketball
-      });
-    }
-  });
-  
-  // Handle player disconnect
-  socket.on('disconnect', () => {
-    console.log('Player disconnected:', socket.id);
-    
-    // Check if player exists before attempting to handle disconnection
-    if (!players[socket.id]) {
-      console.log('Warning: Player', socket.id, 'disconnected but not found in players list');
-      return;
-    }
-    
-    // If disconnecting player had the ball, reset ball position
-    if (basketball.possessedBy === socket.id) {
-      basketball.possessedBy = null;
-      basketball.x = court.width / 2;
-      basketball.y = court.height / 2;
-      
-      // Broadcast updated basketball position
-      io.emit('basketballMoved', basketball);
-    }
-    
-    // Log player info before removal
-    console.log('Removing player data:', players[socket.id]);
-    
-    // Remove player from game state
-    delete players[socket.id];
-    
-    // Log remaining players
-    console.log('Remaining player count:', Object.keys(players).length);
-    
-    // Notify all players about the disconnected player
-    io.emit('playerDisconnected', socket.id);
-  });
+    // Handle shot attempt
+    socket.on('attemptShot', (shotData) => {
+        if (gameState.ball.carrier === socket.id) {
+            const player = gameState.players[socket.id];
+            
+            // Release ball with trajectory
+            gameState.ball.carrier = null;
+            gameState.players[socket.id].hasBall = false;
+            
+            // Start ball flight
+            gameState.ball.inFlight = true;
+            gameState.ball.velocity = shotData.velocity;
+            gameState.ball.targetHoop = shotData.targetHoop;
+            gameState.ball.willScore = shotData.willScore;
+            gameState.ball.shooter = socket.id;
+            
+            io.emit('shotReleased', {
+                playerId: socket.id,
+                playerName: player.name,
+                ballPosition: player.position,
+                velocity: shotData.velocity,
+                targetHoop: shotData.targetHoop
+            });
+        }
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+        console.log('Player disconnected:', socket.id);
+        
+        // If player had ball, drop it
+        if (gameState.ball.carrier === socket.id) {
+            gameState.ball.carrier = null;
+            gameState.ball.position = gameState.players[socket.id].position;
+            io.emit('ballDropped', {
+                position: gameState.ball.position
+            });
+        }
+        
+        // Remove player
+        delete gameState.players[socket.id];
+        delete gameState.scores[socket.id];
+        
+        // Notify other players
+        socket.broadcast.emit('playerLeft', socket.id);
+    });
 });
 
-// Start the server
+// Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`The Dunk Contest server running on port ${PORT}`);
+    console.log(`Open http://localhost:${PORT} to play!`);
 });
+
+// Ball physics update loop (30 FPS)
+setInterval(() => {
+    if (gameState.ball.inFlight) {
+        updateBallPhysics();
+    }
+}, 1000 / 30);
+
+// Update ball physics
+function updateBallPhysics() {
+    const ball = gameState.ball;
+    const dt = 1 / 30; // Delta time
+    const gravity = -15;
+    
+    // Apply gravity
+    ball.velocity.y += gravity * dt;
+    
+    // Update position
+    ball.position.x += ball.velocity.x * dt;
+    ball.position.y += ball.velocity.y * dt;
+    ball.position.z += ball.velocity.z * dt;
+    
+    // Check if ball reached hoop height or ground
+    const hoopY = 3;
+    const hoopRadius = 0.75;
+    
+    // Check for score
+    if (ball.targetHoop && ball.position.y <= hoopY && ball.position.y > 0) {
+        const dx = ball.position.x - ball.targetHoop.x;
+        const dz = ball.position.z - ball.targetHoop.z;
+        const distance = Math.sqrt(dx * dx + dz * dz);
+        
+        if (distance < hoopRadius && ball.willScore) {
+            // Score!
+            ball.inFlight = false;
+            
+            if (ball.shooter && gameState.players[ball.shooter]) {
+                gameState.scores[ball.shooter] += 2;
+                
+                io.emit('shotScored', {
+                    playerId: ball.shooter,
+                    playerName: gameState.players[ball.shooter].name,
+                    score: gameState.scores[ball.shooter]
+                });
+            }
+            
+            // Drop ball below hoop
+            ball.position.y = 0.3;
+            ball.velocity = { x: 0, y: 0, z: 0 };
+            
+            io.emit('ballDropped', {
+                position: ball.position
+            });
+            
+            ball.shooter = null;
+            ball.targetHoop = null;
+        }
+    }
+    
+    // Ground collision
+    if (ball.position.y <= 0.3) {
+        ball.position.y = 0.3;
+        ball.velocity.y *= -0.7; // Bounce
+        
+        // Stop bouncing if too small
+        if (Math.abs(ball.velocity.y) < 0.5) {
+            ball.velocity.y = 0;
+            ball.inFlight = false;
+            
+            // Missed shot
+            if (ball.shooter) {
+                io.emit('shotMissed', {
+                    playerId: ball.shooter,
+                    playerName: gameState.players[ball.shooter] ? gameState.players[ball.shooter].name : 'Unknown'
+                });
+            }
+            
+            io.emit('ballDropped', {
+                position: ball.position
+            });
+            
+            ball.shooter = null;
+            ball.targetHoop = null;
+        }
+        
+        // Apply friction
+        ball.velocity.x *= 0.9;
+        ball.velocity.z *= 0.9;
+    }
+    
+    // Broadcast ball position during flight
+    if (ball.inFlight) {
+        io.emit('ballUpdate', {
+            position: ball.position,
+            velocity: ball.velocity
+        });
+    }
+}

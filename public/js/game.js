@@ -1,60 +1,6 @@
-// Start a dynamic dunk animation
-function startDunkAnimation(player, startPos, endPos, callback) {
-  dunkAnimations.active = true;
-  dunkAnimations.player = player;
-  dunkAnimations.startTime = Date.now();
-  dunkAnimations.startPosition = startPos;
-  dunkAnimations.endPosition = endPos;
-  dunkAnimations.callback = callback;
-  
-  // Save original player position to restore later
-  player.originalPosition = { x: player.x, y: player.y };
-  
-  // Add special "dunking" flag for animation
-  player.isDunking = true;
-}
-
-// Update dunk animation each frame
-function updateDunkAnimation() {
-  if (!dunkAnimations.active) return;
-  
-  const elapsed = Date.now() - dunkAnimations.startTime;
-  const progress = Math.min(1, elapsed / dunkAnimations.duration);
-  const player = dunkAnimations.player;
-  
-  if (!player) {
-    dunkAnimations.active = false;
-    return;
-  }
-  
-  // Calculate position along arc path
-  // Use easeInOutQuad for smoother animation
-  let t = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
-  
-  // Linear interpolation from start to end position
-  player.x = dunkAnimations.startPosition.x + (dunkAnimations.endPosition.x - dunkAnimations.startPosition.x) * t;
-  player.y = dunkAnimations.startPosition.y + (dunkAnimations.endPosition.y - dunkAnimations.startPosition.y) * t;
-  
-  // Add vertical arc (parabola) for jumping effect
-  // Sin curve for arc, peaking at the middle of the animation
-  const verticalOffset = Math.sin(progress * Math.PI) * dunkAnimations.arcHeight;
-  player.y -= verticalOffset;
-  
-  // Animation complete
-  if (progress === 1) {
-    dunkAnimations.active = false;
-    player.isDunking = false;
-    
-    // Execute callback if provided
-    if (dunkAnimations.callback) {
-      dunkAnimations.callback();
-    }
-  }
-}// Canvas setup
+// Three.js integration setup - 3D only mode
+let threeIntegration = null;
 const canvas = document.getElementById('game-canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = 800;
-canvas.height = 600;
 
 // Dunk animation and visual effects
 const dunkAnimations = {
@@ -67,8 +13,6 @@ const dunkAnimations = {
   arcHeight: 220, // Increased height for more impressive long-distance dunks
   callback: null
 };
-
-
 
 // Camera shake variables
 let cameraShake = {
@@ -146,7 +90,7 @@ const socket = io();
 // Game state variables
 let players = {};
 let basketball = null;
-let court = null;
+let court = { width: 800, height: 600, hoopX: 400, hoopY: 150 }; // Default 2D court dimensions
 let myPlayerId = null;
 let myPlayerName = '';
 
@@ -155,66 +99,20 @@ const keys = {};
 let lastJumpTime = 0;
 const JUMP_COOLDOWN = 1000; // 1 second cooldown between jumps
 
-// Particles system for visual effects
-let particles = [];
+// Coordinate conversion functions
+function convert2DToServer3D(x2d, y2d) {
+  // Convert 2D game coordinates (0-800, 0-600) to server 3D coordinates
+  const x3d = ((x2d - 400) / 400) * 10; // Map to -10 to 10
+  const z3d = ((y2d - 300) / 300) * 15; // Map to -15 to 15
+  return { x: x3d, y: 0, z: z3d };
+}
 
-// Player animations
-const playerAnimations = {
-  idle: { frames: 1, currentFrame: 0 },
-  run: { frames: 2, currentFrame: 0, frameDelay: 10, frameCounter: 0 },
-  jump: { frames: 1, currentFrame: 0 }
-};
-
-// Preload images
-const images = {
-  court: new Image(),
-  basketball: new Image(),
-  hoop: new Image(),
-  playerProfessional: {
-    idle: new Image(),
-    run1: new Image(),
-    run2: new Image(),
-    jump: new Image()
-  },
-  playerStreet: {
-    idle: new Image(),
-    run1: new Image(),
-    run2: new Image(),
-    jump: new Image()
-  },
-  playerRetro: {
-    idle: new Image(),
-    run1: new Image(),
-    run2: new Image(),
-    jump: new Image()
-  },
-  playerColorful: {
-    idle: new Image(),
-    run1: new Image(),
-    run2: new Image(),
-    jump: new Image()
-  },
-  playerTeam: {
-    idle: new Image(),
-    run1: new Image(),
-    run2: new Image(),
-    jump: new Image()
-  }
-};
-
-// Simple placeholder images for now
-// In a real game, you'd load actual sprites
-images.court.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg==';
-images.basketball.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==';
-images.hoop.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==';
-
-const outfitTypes = ['professional', 'street', 'retro', 'colorful', 'team'];
-outfitTypes.forEach(type => {
-  images['player' + type.charAt(0).toUpperCase() + type.slice(1)].idle.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==';
-  images['player' + type.charAt(0).toUpperCase() + type.slice(1)].run1.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==';
-  images['player' + type.charAt(0).toUpperCase() + type.slice(1)].run2.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==';
-  images['player' + type.charAt(0).toUpperCase() + type.slice(1)].jump.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPj/HwADBwIAMCbHYQAAAABJRU5ErkJggg==';
-});
+function convertServer3DTo2D(x3d, y3d, z3d) {
+  // Convert server 3D coordinates back to 2D game coordinates
+  const x2d = (x3d / 10) * 400 + 400;
+  const y2d = (z3d / 15) * 300 + 300;
+  return { x: x2d, y: y2d };
+}
 
 // Initialize event listeners
 function initEventListeners() {
@@ -224,12 +122,60 @@ function initEventListeners() {
     
     // Jump/Dunk with Spacebar
     if (e.key === ' ' || e.code === 'Space') {
-      attemptJump();
+      attemptJumpOrDunk();
     }
     
     // Get ball with E key
     if (e.key === 'e' || e.key === 'E') {
-      socket.emit('getBall');
+      e.preventDefault();
+      console.log('E key pressed - attempting ball pickup');
+      
+      if (!players[myPlayerId]) {
+        console.error('Player not initialized yet');
+        return;
+      }
+      
+      if (!basketball) {
+        console.error('Basketball not initialized yet');
+        return;
+      }
+      
+      // Ensure we have the latest position synced with server
+      const player = players[myPlayerId];
+      const pos3d = convert2DToServer3D(player.x, player.y);
+      
+      console.log('My 2D position:', player.x, player.y);
+      console.log('My 3D position:', pos3d);
+      console.log('Basketball 2D position:', basketball.x, basketball.y);
+      
+      const ballPos3d = convert2DToServer3D(basketball.x, basketball.y);
+      console.log('Basketball 3D position:', ballPos3d);
+      
+      // Calculate distance locally to verify
+      const distance2D = Math.sqrt(
+        Math.pow(player.x - basketball.x, 2) + 
+        Math.pow(player.y - basketball.y, 2)
+      );
+      const distance3D = Math.sqrt(
+        Math.pow(pos3d.x - ballPos3d.x, 2) + 
+        Math.pow(pos3d.z - ballPos3d.z, 2)
+      );
+      
+      console.log('Distance 2D:', distance2D, 'pixels');
+      console.log('Distance 3D:', distance3D, 'units (need < 2.5)');
+      
+      // Force update position before pickup attempt
+      socket.emit('move', {
+        position: pos3d,
+        velocity: { x: 0, y: 0, z: 0 },
+        animation: 'idle',
+        facingDirection: player.facingDirection || 1
+      });
+      
+      // Small delay to ensure server has updated position
+      setTimeout(() => {
+        socket.emit('pickupBall');
+      }, 50);
     }
   });
   
@@ -240,135 +186,240 @@ function initEventListeners() {
 
 // Initial socket event handlers
 function initSocketEvents() {
-  // Initial game state
-  socket.on('gameState', (gameState) => {
-    console.log('Received initial game state:', gameState);
+  // Initial game state from server
+  socket.on('initialize', (data) => {
+    console.log('Received initialization data:', data);
+    console.log('Ball initial server position:', data.gameState.ball.position);
+    console.log('My initial server position:', data.gameState.players[data.playerId].position);
     
-    players = gameState.players;
-    basketball = gameState.basketball;
-    court = gameState.court;
-    myPlayerId = socket.id;
+    myPlayerId = data.playerId;
+    const gameState = data.gameState;
     
-    if (!players[myPlayerId]) {
-      console.error('Player data not found for ID:', myPlayerId);
-      alert('Error initializing player data. Please refresh the page.');
-      return;
+    // Convert server players to client format
+    players = {};
+    Object.entries(gameState.players).forEach(([id, serverPlayer]) => {
+      const pos2d = convertServer3DTo2D(serverPlayer.position.x, serverPlayer.position.y, serverPlayer.position.z);
+      players[id] = {
+        id: id,
+        name: serverPlayer.name,
+        x: pos2d.x,
+        y: pos2d.y,
+        score: gameState.scores[id] || 0,
+        hasBall: serverPlayer.hasBall,
+        isJumping: false,
+        outfit: {
+          type: 'professional',
+          primaryColor: serverPlayer.teamColors.primary,
+          secondaryColor: serverPlayer.teamColors.secondary
+        },
+        spriteConfig: {
+          jerseyNumber: serverPlayer.jerseyNumber,
+          hairStyle: Math.floor(Math.random() * 5),
+          bodyType: 'athletic'
+        }
+      };
+    });
+    
+    // Convert basketball position
+    if (gameState.ball) {
+      console.log('Converting ball position from server:', gameState.ball.position);
+      const ballPos2d = convertServer3DTo2D(gameState.ball.position.x, gameState.ball.position.y, gameState.ball.position.z);
+      console.log('Converted ball position to 2D:', ballPos2d);
+      basketball = {
+        x: ballPos2d.x,
+        y: ballPos2d.y,
+        possessedBy: gameState.ball.carrier
+      };
     }
     
     myPlayerName = players[myPlayerId].name;
     console.log('My player initialized:', players[myPlayerId]);
     
-    // Update UI with player name
-    document.getElementById('player-name').textContent = myPlayerName;
+    // Create sprite players for all existing players
+    if (threeIntegration) {
+      Object.values(players).forEach(player => {
+        threeIntegration.createSpritePlayer(player.id, player);
+      });
+      
+      // Update basketball position
+      if (basketball) {
+        threeIntegration.updateBasketball(basketball);
+      }
+    }
     
-    // Update scoreboard
+    // Update UI
+    document.getElementById('player-name').textContent = myPlayerName;
+    document.getElementById('player-score').textContent = players[myPlayerId].score;
     updateScoreboard();
   });
   
   // Player joined the game
-  socket.on('playerJoined', (player) => {
-    players[player.id] = player;
+  socket.on('playerJoined', (serverPlayer) => {
+    const pos2d = convertServer3DTo2D(serverPlayer.position.x, serverPlayer.position.y, serverPlayer.position.z);
+    const player = {
+      id: serverPlayer.id,
+      name: serverPlayer.name,
+      x: pos2d.x,
+      y: pos2d.y,
+      score: 0,
+      hasBall: serverPlayer.hasBall,
+      isJumping: false,
+      outfit: {
+        type: 'professional',
+        primaryColor: serverPlayer.teamColors.primary,
+        secondaryColor: serverPlayer.teamColors.secondary
+      },
+      spriteConfig: {
+        jerseyNumber: serverPlayer.jerseyNumber,
+        hairStyle: Math.floor(Math.random() * 5),
+        bodyType: 'athletic'
+      }
+    };
+    
+    players[serverPlayer.id] = player;
+    
+    // Create sprite player
+    if (threeIntegration) {
+      threeIntegration.createSpritePlayer(serverPlayer.id, player);
+    }
+    
     updateScoreboard();
   });
   
   // Player moved
-  socket.on('playerMoved', (player) => {
-    players[player.id] = player;
-  });
-  
-  // Player jumped
-  socket.on('playerJumped', (data) => {
+  socket.on('playerMoved', (data) => {
     if (players[data.playerId]) {
-      players[data.playerId].isJumping = true;
-    }
-  });
-  
-  // Player landed
-  socket.on('playerLanded', (data) => {
-    if (players[data.playerId]) {
-      players[data.playerId].isJumping = false;
-    }
-  });
-  
-  // Ball possession changed
-  socket.on('ballPossession', (data) => {
-    if (players[data.playerId]) {
-      basketball = data.basketball;
-      players[data.playerId].hasBall = true;
+      const pos2d = convertServer3DTo2D(data.position.x, data.position.y, data.position.z);
+      players[data.playerId].x = pos2d.x;
+      players[data.playerId].y = pos2d.y;
       
-      // Update all other players to not have the ball
-      Object.keys(players).forEach(id => {
-        if (id !== data.playerId) {
-          players[id].hasBall = false;
-        }
-      });
-    }
-  });
-  
-  // Basketball moved
-  socket.on('basketballMoved', (updatedBasketball) => {
-    // Play ball bounce sound
-    if (window.SoundManager && basketball) {
-      // Only play sound if significant movement happened
-      const distanceMoved = Math.sqrt(
-        Math.pow(basketball.x - updatedBasketball.x, 2) + 
-        Math.pow(basketball.y - updatedBasketball.y, 2)
-      );
-      
-      if (distanceMoved > 50) { // Threshold for playing sound
-        window.SoundManager.play('bounce', { volume: 0.3 });
+      // Update sprite player
+      if (threeIntegration) {
+        threeIntegration.updateSpritePlayer(data.playerId, players[data.playerId]);
       }
     }
+  });
+  
+  // Ball picked up
+  socket.on('ballPickedUp', (data) => {
+    console.log('Ball picked up by:', data.playerId);
     
-    basketball = updatedBasketball;
+    // Update ball possession
+    Object.keys(players).forEach(id => {
+      players[id].hasBall = (id === data.playerId);
+    });
     
-    // Ensure all players' hasBall property is updated when ball moves
-    // This fixes the issue where ball icon stays on player after dunking
-    if (!updatedBasketball.possessedBy) {
-      Object.keys(players).forEach(id => {
-        players[id].hasBall = false;
-      });
+    if (basketball && data.ballPosition) {
+      const ballPos2d = convertServer3DTo2D(data.ballPosition.x, data.ballPosition.y, data.ballPosition.z);
+      basketball.x = ballPos2d.x;
+      basketball.y = ballPos2d.y;
+      basketball.possessedBy = data.playerId;
+    }
+    
+    // Update 3D visualization
+    if (threeIntegration) {
+      threeIntegration.updateSpritePlayer(data.playerId, players[data.playerId]);
+      if (basketball) {
+        threeIntegration.updateBasketball(basketball);
+      }
     }
   });
   
-  // Player dunked
-  socket.on('playerDunked', (data) => {
-    if (players[data.playerId]) {
-      players[data.playerId].score = data.playerScore;
+  // Ball dropped
+  socket.on('ballDropped', (data) => {
+    console.log('Ball dropped at:', data.position);
+    
+    // Clear all ball possession
+    Object.keys(players).forEach(id => {
+      players[id].hasBall = false;
+    });
+    
+    if (data.position) {
+      const ballPos2d = convertServer3DTo2D(data.position.x, data.position.y, data.position.z);
+      basketball = {
+        x: ballPos2d.x,
+        y: ballPos2d.y,
+        possessedBy: null
+      };
       
-      // Make sure to update the ball possession state
+      console.log('Ball dropped at 2D position:', ballPos2d);
+      console.log('Ball dropped at 3D position:', data.position);
+      
+      // Update 3D basketball position
+      if (threeIntegration) {
+        threeIntegration.updateBasketball(basketball);
+      }
+    }
+  });
+  
+  // Ball update during flight
+  socket.on('ballUpdate', (data) => {
+    if (data.position) {
+      const ballPos2d = convertServer3DTo2D(data.position.x, data.position.y, data.position.z);
+      basketball = {
+        x: ballPos2d.x,
+        y: ballPos2d.y,
+        possessedBy: null
+      };
+      
+      // Update 3D basketball position
+      if (threeIntegration) {
+        threeIntegration.updateBasketball(basketball);
+      }
+    }
+  });
+  
+  // Dunk scored
+  socket.on('dunkScored', (data) => {
+    console.log('Dunk scored by:', data.playerName);
+    
+    if (players[data.playerId]) {
+      players[data.playerId].score = data.score;
       players[data.playerId].hasBall = false;
       
       // Update UI if it's the current player
       if (data.playerId === myPlayerId) {
-        document.getElementById('player-score').textContent = data.playerScore;
+        document.getElementById('player-score').textContent = data.score;
       }
       
-      // Show NBA Jam style dunk animation with path from start to rim
-      showDunkEffect(
-        players[data.playerId], 
-        data.startPosition, 
-        data.dunkPosition, 
-        court.hoopX, 
-        court.hoopY
-      );
+      // Show dunk effect
+      const player = players[data.playerId];
+      showDunkEffect(player, { x: player.x, y: player.y }, { x: 400, y: 150 }, 400, 150);
       
-      // Force update all players to not have the ball after a dunk
-      Object.keys(players).forEach(id => {
-        players[id].hasBall = false;
-      });
+      // Start 3D dunk animation
+      if (threeIntegration) {
+        threeIntegration.startDunkAnimation(
+          data.playerId,
+          { x: player.x, y: player.y },
+          { x: 400, y: 150 },
+          () => {
+            console.log('3D dunk animation completed');
+          }
+        );
+        
+        // Add camera shake for dramatic effect
+        threeIntegration.addCameraShake(300, 0.5);
+      }
       
-      // Update scoreboard
       updateScoreboard();
     }
   });
   
   // Player disconnected
-  socket.on('playerDisconnected', (playerId) => {
+  socket.on('playerLeft', (playerId) => {
+    // Remove sprite player
+    if (threeIntegration) {
+      threeIntegration.removeSpritePlayer(playerId);
+    }
+    
     delete players[playerId];
     updateScoreboard();
   });
 }
+
+// Track last sent position to avoid spamming server
+let lastSentPosition = { x: null, y: null };
+let lastSentAnimation = null;
 
 // Update player position based on key presses
 function updatePlayerPosition() {
@@ -400,22 +451,65 @@ function updatePlayerPosition() {
     moved = true;
   }
   
-  // If player moved, send update to server
-  if (moved) {
-    socket.emit('playerMovement', {
-      x: player.x,
-      y: player.y
+  // Convert 2D position to 3D for server
+  const pos3d = convert2DToServer3D(player.x, player.y);
+  
+  // Determine animation and facing direction
+  const animation = moved ? 'run' : 'idle';
+  let facingDirection = player.facingDirection || 1;
+  if (player.x < originalX) facingDirection = -1;
+  else if (player.x > originalX) facingDirection = 1;
+  player.facingDirection = facingDirection;
+  
+  // Only send update if position or animation actually changed
+  const positionChanged = lastSentPosition.x !== player.x || lastSentPosition.y !== player.y;
+  const animationChanged = lastSentAnimation !== animation;
+  
+  if (positionChanged || animationChanged) {
+    // Send movement update in server's expected format
+    socket.emit('move', {
+      position: pos3d,
+      velocity: { x: 0, y: 0, z: 0 },
+      animation: animation,
+      facingDirection: facingDirection
     });
+    
+    // Update tracking variables
+    lastSentPosition.x = player.x;
+    lastSentPosition.y = player.y;
+    lastSentAnimation = animation;
+  }
+  
+  // Always update 3D sprite player locally for smooth animation
+  if (threeIntegration) {
+    threeIntegration.updateSpritePlayer(myPlayerId, player);
   }
 }
 
-// Attempt to jump/dunk
-function attemptJump() {
+// Attempt to jump or dunk
+function attemptJumpOrDunk() {
   const now = Date.now();
   if (now - lastJumpTime < JUMP_COOLDOWN) return;
   
   lastJumpTime = now;
-  socket.emit('playerJump');
+  
+  // Check if player has ball and is near hoop
+  const player = players[myPlayerId];
+  if (player && player.hasBall) {
+    // Check distance to hoops (approximate positions)
+    const leftHoopDist = Math.sqrt(Math.pow(player.x - 400, 2) + Math.pow(player.y - 50, 2));
+    const rightHoopDist = Math.sqrt(Math.pow(player.x - 400, 2) + Math.pow(player.y - 550, 2));
+    
+    if (leftHoopDist < 100 || rightHoopDist < 100) {
+      // Close enough to dunk
+      socket.emit('attemptDunk');
+      return;
+    }
+  }
+  
+  // Otherwise just jump
+  // Note: Server doesn't seem to have jump handling, so this might not work
+  console.log('Jump attempted');
 }
 
 // Show dunk effect/animation
@@ -464,6 +558,8 @@ function showDunkEffect(player, startPosition, dunkPosition, hoopX, hoopY) {
 // Update the scoreboard
 function updateScoreboard() {
   const scoreboardElement = document.getElementById('player-scores');
+  if (!scoreboardElement) return;
+  
   scoreboardElement.innerHTML = '';
   
   // Sort players by score (highest first)
@@ -489,774 +585,24 @@ function updateScoreboard() {
   });
 }
 
-// Draw functions
-function drawCourt() {
-  // Draw basketball court with proper perspective
-  
-  // Floor color (wooden)
-  ctx.fillStyle = '#804000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  
-  // Define the court corners with centered perspective
-  const courtWidth = canvas.width * 0.8;
-  const courtDepth = canvas.height * 0.8;
-  const courtX = (canvas.width - courtWidth) / 2;
-  const courtY = canvas.height * 0.15; // Position court higher on canvas
-  
-  // Calculate court corners for proper perspective
-  // Top (far) edge is narrower than bottom (near) edge
-  const topWidth = courtWidth * 0.6; // Far edge is 60% of near edge width
-  
-  // Define court corners
-  const topLeft = { x: courtX + (courtWidth - topWidth) / 2, y: courtY };
-  const topRight = { x: topLeft.x + topWidth, y: courtY };
-  const bottomLeft = { x: courtX, y: courtY + courtDepth };
-  const bottomRight = { x: courtX + courtWidth, y: courtY + courtDepth };
-  
-  // Draw court floor with perspective
-  ctx.beginPath();
-  ctx.moveTo(topLeft.x, topLeft.y); // Top left (far)
-  ctx.lineTo(topRight.x, topRight.y); // Top right (far)
-  ctx.lineTo(bottomRight.x, bottomRight.y); // Bottom right (near)
-  ctx.lineTo(bottomLeft.x, bottomLeft.y); // Bottom left (near)
-  ctx.closePath();
-  
-  // Create gradient for floor to add depth
-  const gradient = ctx.createLinearGradient(courtX, courtY, courtX, courtY + courtDepth);
-  gradient.addColorStop(0, '#b07d5a'); // Lighter at top (far)
-  gradient.addColorStop(1, '#8b5a2b'); // Darker at bottom (near)
-  ctx.fillStyle = gradient;
-  ctx.fill();
-  
-  // Draw wood grain texture
-  const boardCount = 15; // Number of wooden boards across the court
-  const boardWidth = courtWidth / boardCount;
-  
-  // Draw wood grain boards
-  ctx.strokeStyle = 'rgba(100, 60, 30, 0.5)';
-  ctx.lineWidth = 1;
-  
-  for (let i = 0; i <= boardCount; i++) {
-    const startX = courtX + i * (courtWidth / boardCount);
-    const startXTop = topLeft.x + i * (topWidth / boardCount);
-    
-    // Connect bottom to top to create perspective lines
-    ctx.beginPath();
-    ctx.moveTo(startX, courtY + courtDepth);
-    ctx.lineTo(startXTop, courtY);
-    ctx.stroke();
-    
-    // Add subtle wood grain lines within each plank
-    const grainCount = 3;
-    if (i < boardCount) {
-      for (let j = 1; j <= grainCount; j++) {
-        const grainOffsetStart = j * (boardWidth / (grainCount + 1));
-        const grainOffsetTop = j * ((topWidth / boardCount) / (grainCount + 1));
-        
-        ctx.beginPath();
-        ctx.moveTo(startX + grainOffsetStart, courtY + courtDepth);
-        ctx.lineTo(startXTop + grainOffsetTop, courtY);
-        ctx.strokeStyle = 'rgba(100, 60, 30, 0.2)';
-        ctx.stroke();
-      }
-    }
-  }
-  
-  // Draw some horizontal grain lines
-  const rowCount = 10;
-  for (let i = 0; i <= rowCount; i++) {
-    const y = courtY + (courtDepth / rowCount) * i;
-    const ratio = i / rowCount;
-    const startX = courtX + (courtWidth - topWidth) / 2 * ratio;
-    const width = courtWidth - (courtWidth - topWidth) * ratio;
-    
-    ctx.beginPath();
-    ctx.moveTo(startX, y);
-    ctx.lineTo(startX + width, y);
-    ctx.strokeStyle = 'rgba(100, 60, 30, 0.3)';
-    ctx.stroke();
-  }
-  
-  // Draw court outline
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  
-  // Draw center circle with perspective (ellipse)
-  const centerX = canvas.width / 2;
-  const centerY = courtY + courtDepth * 0.5;
-  const radiusX = courtWidth * 0.2;
-  const radiusY = courtDepth * 0.1; // Flatter for perspective
-  
-  ctx.beginPath();
-  ctx.ellipse(centerX, centerY, radiusX, radiusY, 0, 0, Math.PI * 2);
-  ctx.stroke();
-  
-  // Free throw line - closer to hoop
-  const ftLineY = courtY + courtDepth * 0.25;
-  const ftLineWidth = topWidth + (courtWidth - topWidth) * 0.25;
-  const ftLineX = courtX + (courtWidth - ftLineWidth) / 2;
-  
-  ctx.beginPath();
-  ctx.moveTo(ftLineX, ftLineY);
-  ctx.lineTo(ftLineX + ftLineWidth, ftLineY);
-  ctx.stroke();
-  
-  // Center line
-  ctx.beginPath();
-  ctx.moveTo(bottomLeft.x, centerY);
-  ctx.lineTo(bottomRight.x, centerY);
-  ctx.stroke();
-  
-  // Draw 3D hoop at the far edge of the court
-  // Calculate proper perspective position for the far edge
-  const backboardWidth = topWidth * 0.4;
-  const backboardHeight = courtDepth * 0.1;
-  const backboardX = centerX - backboardWidth / 2;
-  const backboardY = topLeft.y - 5; // Position slightly above the far edge for visibility
-  
-  // Draw the backboard support base on the court floor
-  const baseWidth = 30;
-  const baseHeight = 10;
-  const baseX = centerX - baseWidth / 2;
-  const baseY = topLeft.y;
-  
-  // Base shadow
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(baseX + 2, baseY + 2, baseWidth, baseHeight);
-  
-  // Base itself
-  ctx.fillStyle = '#555';
-  ctx.fillRect(baseX, baseY, baseWidth, baseHeight);
-  ctx.strokeStyle = '#333';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(baseX, baseY, baseWidth, baseHeight);
-  
-  // Draw backboard support pole (vertical)
-  const poleWidth = 10;
-  const poleHeight = 40; // Shorter pole to fit perspective
-  const poleX = centerX - poleWidth / 2;
-  const poleY = baseY - poleHeight; // Start from the base and go up
-  
-  // Pole shadow
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-  ctx.fillRect(poleX + 2, poleY, poleWidth, poleHeight);
-  
-  // Main pole
-  const poleGradient = ctx.createLinearGradient(poleX, poleY, poleX + poleWidth, poleY);
-  poleGradient.addColorStop(0, '#888');
-  poleGradient.addColorStop(0.5, '#ddd');
-  poleGradient.addColorStop(1, '#888');
-  ctx.fillStyle = poleGradient;
-  ctx.fillRect(poleX, poleY, poleWidth, poleHeight);
-  
-  // Pole outline
-  ctx.strokeStyle = '#666';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(poleX, poleY, poleWidth, poleHeight);
-  
-  // Backboard - positioned at the top of the pole
-  // Backboard shadow (for depth)
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillRect(backboardX + 2, poleY - backboardHeight, backboardWidth, backboardHeight);
-  
-  // Main backboard
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(backboardX, poleY - backboardHeight, backboardWidth, backboardHeight);
-  
-  // Backboard depth (3D effect)
-  ctx.fillStyle = '#ddd';
-  ctx.beginPath();
-  ctx.moveTo(backboardX, poleY - backboardHeight);
-  ctx.lineTo(backboardX - 3, poleY - backboardHeight - 3);
-  ctx.lineTo(backboardX + backboardWidth - 3, poleY - backboardHeight - 3);
-  ctx.lineTo(backboardX + backboardWidth, poleY - backboardHeight);
-  ctx.closePath();
-  ctx.fill();
-  
-  // Backboard outline
-  ctx.strokeStyle = '#999';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(backboardX, poleY - backboardHeight, backboardWidth, backboardHeight);
-  
-  // Add backboard target box
-  ctx.strokeStyle = 'rgba(255, 0, 0, 0.7)';
-  ctx.lineWidth = 1;
-  const targetSize = backboardHeight * 0.6;
-  const targetX = backboardX + (backboardWidth - targetSize) / 2;
-  const targetY = poleY - backboardHeight + (backboardHeight - targetSize) / 2;
-  ctx.strokeRect(targetX, targetY, targetSize, targetSize);
-  
-  // Draw the rim with perspective (ellipse)
-  const rimX = centerX;
-  const rimY = poleY - backboardHeight + backboardHeight * 0.8; // Position rim lower on backboard for proper perspective
-  const rimRadiusX = 12;
-  const rimRadiusY = 3; // Flatter for perspective
-  
-  // Rim shadow
-  ctx.beginPath();
-  ctx.ellipse(rimX + 1, rimY + 1, rimRadiusX, rimRadiusY, 0, 0, Math.PI, false);
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  
-  // Actual rim
-  ctx.beginPath();
-  ctx.ellipse(rimX, rimY, rimRadiusX, rimRadiusY, 0, 0, Math.PI, false);
-  ctx.strokeStyle = '#ff0000';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-  
-  // Add rim supports
-  ctx.beginPath();
-  ctx.moveTo(rimX - rimRadiusX, rimY);
-  ctx.lineTo(backboardX + backboardWidth * 0.3, poleY - backboardHeight + backboardHeight * 0.6);
-  ctx.moveTo(rimX + rimRadiusX, rimY);
-  ctx.lineTo(backboardX + backboardWidth * 0.7, poleY - backboardHeight + backboardHeight * 0.6);
-  ctx.strokeStyle = '#aaa';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  
-  // Draw net (simplified for the perspective)
-  ctx.beginPath();
-  // Left side of net
-  ctx.moveTo(rimX - rimRadiusX, rimY);
-  ctx.lineTo(rimX - rimRadiusX * 0.5, rimY + 15);
-  // Right side of net
-  ctx.moveTo(rimX + rimRadiusX, rimY);
-  ctx.lineTo(rimX + rimRadiusX * 0.5, rimY + 15);
-  // Bottom of net
-  ctx.moveTo(rimX - rimRadiusX * 0.5, rimY + 15);
-  ctx.lineTo(rimX + rimRadiusX * 0.5, rimY + 15);
-  
-  // Vertical net lines
-  const netSegments = 5;
-  for (let i = 1; i < netSegments; i++) {
-    const segX = rimX - rimRadiusX + (2 * rimRadiusX * i) / netSegments;
-    ctx.moveTo(segX, rimY);
-    const bottomX = rimX - rimRadiusX * 0.5 + rimRadiusX * i / netSegments;
-    ctx.lineTo(bottomX, rimY + 15);
-  }
-  
-  // Horizontal net lines
-  for (let i = 1; i < 2; i++) {
-    const y = rimY + i * 6;
-    const widthRatio = i / 2;
-    const leftX = rimX - rimRadiusX + (rimRadiusX * 0.5 * widthRatio);
-    const rightX = rimX + rimRadiusX - (rimRadiusX * 0.5 * widthRatio);
-    
-    ctx.moveTo(leftX, y);
-    ctx.lineTo(rightX, y);
-  }
-  
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 0.5;
-  ctx.stroke();
-  
-  // Store the court dimensions for gameplay
-  court.width = courtWidth;
-  court.height = courtDepth;
-  court.x = courtX;
-  court.y = courtY;
-  court.hoopX = rimX;
-  court.hoopY = rimY;
-}
-
-function drawBasketball() {
-  if (!basketball) return;
-  
-  const ballX = basketball.x;
-  const ballY = basketball.y;
-  const ballRadius = 12;
-  
-  // Calculate shadow position - adjust shadow based on court proximity
-  // Shadow gets closer to ball as ball gets closer to court
-  const distFromHoop = Math.sqrt(
-    Math.pow(ballX - court.hoopX, 2) + 
-    Math.pow(ballY - court.hoopY, 2)
-  );
-  
-  // Calculate shadow distance and size based on virtual height
-  // Ball appears to be higher when closer to hoop
-  const shadowDistance = Math.min(20, 5 + distFromHoop * 0.05);
-  const shadowSize = Math.max(0.3, 1 - (distFromHoop * 0.0005));
-  
-  // Draw shadow (ellipse) beneath the ball
-  ctx.beginPath();
-  ctx.ellipse(
-    ballX, 
-    ballY + shadowDistance, 
-    ballRadius * shadowSize * 1.2, 
-    ballRadius * shadowSize * 0.4, 
-    0, 0, Math.PI * 2
-  );
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fill();
-  
-  // Store previous ball position if not set
-  basketball.prevX = basketball.prevX || ballX;
-  basketball.prevY = basketball.prevY || ballY;
-  
-  // Calculate ball motion for rotation effect
-  const dx = ballX - basketball.prevX;
-  const dy = ballY - basketball.prevY;
-  const isMoving = Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5;
-  
-  // Ball with 3D lighting effect - light source from top-right
-  const gradient = ctx.createRadialGradient(
-    ballX - ballRadius * 0.3,
-    ballY - ballRadius * 0.3,
-    0,
-    ballX,
-    ballY,
-    ballRadius * 1.2
-  );
-  gradient.addColorStop(0, '#ff9d5c'); // Highlight
-  gradient.addColorStop(0.6, '#ff6600'); // Base color
-  gradient.addColorStop(1, '#cc5200'); // Shadow edge
-  
-  // Add motion blur if the ball is moving fast
-  if (isMoving) {
-    const speed = Math.sqrt(dx*dx + dy*dy);
-    if (speed > 3) {
-      // Add motion blur ellipse
-      ctx.beginPath();
-      ctx.ellipse(
-        ballX - dx/2, 
-        ballY - dy/2, 
-        ballRadius * 0.9, 
-        ballRadius * 0.7, 
-        Math.atan2(dy, dx),
-        0, Math.PI * 2
-      );
-      ctx.fillStyle = 'rgba(255, 102, 0, 0.3)';
-      ctx.fill();
-    }
-  }
-  
-  // Main ball
-  ctx.beginPath();
-  ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
-  ctx.fillStyle = gradient;
-  ctx.fill();
-  
-  // Ball outline
-  ctx.beginPath();
-  ctx.arc(ballX, ballY, ballRadius, 0, Math.PI * 2);
-  ctx.strokeStyle = '#000';
-  ctx.lineWidth = 1;
-  ctx.stroke();
-  
-  // Basketball lines with perspective (curved)
-  // Calculate rotation angle based on movement
-  let ballRotation = (Date.now() % 3000) / 3000 * Math.PI * 2;
-  
-  // Add dynamic rotation based on ball movement
-  if (isMoving) {
-    const speed = Math.sqrt(dx*dx + dy*dy);
-    const moveAngle = Math.atan2(dy, dx);
-    // Adjust rotation to make the ball appear to roll in the direction of movement
-    ballRotation = moveAngle + Math.PI/2 + (Date.now() % 1000) / 1000 * speed * 0.2;
-  }
-  
-  // Horizontal curved line
-  ctx.beginPath();
-  ctx.ellipse(
-    ballX,
-    ballY,
-    ballRadius * 0.95,
-    ballRadius * 0.3,
-    ballRotation,
-    0, Math.PI * 2
-  );
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  
-  // Vertical curved line (at right angle to first)
-  ctx.beginPath();
-  ctx.ellipse(
-    ballX,
-    ballY,
-    ballRadius * 0.95,
-    ballRadius * 0.3,
-    ballRotation + Math.PI/2,
-    0, Math.PI * 2
-  );
-  ctx.stroke();
-  
-  // Add a highlight for extra 3D effect
-  ctx.beginPath();
-  ctx.arc(
-    ballX - ballRadius * 0.3,
-    ballY - ballRadius * 0.3,
-    ballRadius * 0.25,
-    0, Math.PI * 2
-  );
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.fill();
-  
-  // Add a second smaller highlight
-  ctx.beginPath();
-  ctx.arc(
-    ballX - ballRadius * 0.1,
-    ballY - ballRadius * 0.5,
-    ballRadius * 0.1,
-    0, Math.PI * 2
-  );
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-  ctx.fill();
-  
-  // Store current position for next frame
-  basketball.prevX = ballX;
-  basketball.prevY = ballY;
-}
-
-function drawPlayers() {
-  Object.values(players).forEach(player => {
-    drawPlayer(player);
-  });
-}
-
-function drawPlayer(player) {
-  // Determine player state (idle, running, jumping)
-  let state = 'idle';
-  
-  if (player.isJumping) {
-    state = 'jump';
-  } else {
-    const prevX = player.prevX || player.x;
-    const prevY = player.prevY || player.y;
-    
-    if (prevX !== player.x || prevY !== player.y) {
-      state = 'run';
-      
-      // Update animation frame for running
-      if (state === 'run') {
-        playerAnimations.run.frameCounter++;
-        if (playerAnimations.run.frameCounter >= playerAnimations.run.frameDelay) {
-          playerAnimations.run.frameCounter = 0;
-          playerAnimations.run.currentFrame = (playerAnimations.run.currentFrame + 1) % playerAnimations.run.frames;
-        }
-      }
-    }
-  }
-  
-  // Store current position for next frame comparison
-  player.prevX = player.x;
-  player.prevY = player.y;
-  
-  // Calculate height offset for jumping
-  let heightOffset = 0;
-  if (player.isJumping) {
-    // Simple parabolic jump animation
-    const jumpProgress = (Date.now() - lastJumpTime) / JUMP_COOLDOWN;
-    heightOffset = -40 * Math.sin(jumpProgress * Math.PI);
-  }
-  
-  // Scale player size based on y-position to enhance perspective
-  // Players appear smaller when farther away (smaller y values)
-  const distanceFromBottom = canvas.height - player.y;
-  const scale = 0.7 + (player.y / canvas.height) * 0.5; // Scale from 0.7 to 1.2 based on y-position
-  const basePlayerWidth = 30 * scale;
-  const basePlayerHeight = 45 * scale;
-  
-  // Draw shadow beneath player (ellipse, fainter when jumping)
-  const shadowAlpha = player.isJumping ? 0.15 : 0.3;
-  const shadowWidth = basePlayerWidth * 0.8;
-  const shadowHeight = shadowWidth * 0.3; // Flatter for perspective
-  
-  ctx.beginPath();
-  ctx.ellipse(player.x, player.y + 5, shadowWidth, shadowHeight, 0, 0, Math.PI * 2);
-  ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
-  ctx.fill();
-  
-  // Determine the correct sprite based on outfit type
-  const outfitKey = 'player' + player.outfit.type.charAt(0).toUpperCase() + player.outfit.type.slice(1);
-  
-  // Create 3D body for the player
-  // Legs/shorts (adjusted for perspective)
-  const legsHeight = basePlayerHeight * 0.35;
-  const legsWidth = basePlayerWidth;
-  
-  ctx.fillStyle = player.outfit.secondaryColor;
-  if (state === 'jump') {
-    // Jumping player legs - more spread out
-    ctx.fillRect(
-      player.x - legsWidth/2, 
-      player.y - legsHeight + heightOffset, 
-      legsWidth, 
-      legsHeight
-    );
-  } else if (state === 'run') {
-    // Running player legs - animated
-    const legOffset = playerAnimations.run.currentFrame === 0 ? 2 : -2;
-    ctx.fillRect(
-      player.x - legsWidth/2, 
-      player.y - legsHeight, 
-      legsWidth, 
-      legsHeight
-    );
-  } else {
-    // Idle player legs
-    ctx.fillRect(
-      player.x - legsWidth/2, 
-      player.y - legsHeight, 
-      legsWidth, 
-      legsHeight
-    );
-  }
-  
-  // Upper body/jersey with 3D effect
-  const jerseyHeight = basePlayerHeight * 0.35;
-  const jerseyWidth = basePlayerWidth;
-  const jerseyY = player.y - legsHeight - jerseyHeight + heightOffset;
-  
-  // Main jersey color
-  ctx.fillStyle = player.outfit.primaryColor;
-  
-  // Front face of jersey
-  ctx.fillRect(
-    player.x - jerseyWidth/2, 
-    jerseyY, 
-    jerseyWidth, 
-    jerseyHeight
-  );
-  
-  // Top face of jersey (3D effect)
-  ctx.fillStyle = adjustColor(player.outfit.primaryColor, 20); // Lighter color for top
-  ctx.beginPath();
-  ctx.moveTo(player.x - jerseyWidth/2, jerseyY);
-  ctx.lineTo(player.x - jerseyWidth/2 - 3, jerseyY - 5); // Top left corner
-  ctx.lineTo(player.x + jerseyWidth/2 - 3, jerseyY - 5); // Top right corner
-  ctx.lineTo(player.x + jerseyWidth/2, jerseyY);
-  ctx.closePath();
-  ctx.fill();
-  
-  // Side face of jersey (3D effect)
-  ctx.fillStyle = adjustColor(player.outfit.primaryColor, -20); // Darker color for side
-  ctx.beginPath();
-  ctx.moveTo(player.x + jerseyWidth/2, jerseyY);
-  ctx.lineTo(player.x + jerseyWidth/2 - 3, jerseyY - 5);
-  ctx.lineTo(player.x + jerseyWidth/2 - 3, jerseyY + jerseyHeight - 5);
-  ctx.lineTo(player.x + jerseyWidth/2, jerseyY + jerseyHeight);
-  ctx.closePath();
-  ctx.fill();
-  
-  // Draw player head with 3D effects
-  const headSize = basePlayerHeight * 0.2;
-  const headY = jerseyY - headSize - 5;
-  
-  // Head shadow (on neck)
-  ctx.beginPath();
-  ctx.arc(player.x, headY + 6, headSize * 0.8, 0, Math.PI * 2);
-  ctx.fillStyle = '#e8bb9a'; // Darker skin for shadow
-  ctx.fill();
-  
-  // Main head (slightly lighter color and raised)
-  ctx.beginPath();
-  ctx.arc(player.x, headY, headSize, 0, Math.PI * 2);
-  ctx.fillStyle = '#ffd0a0'; // Base skin tone
-  ctx.fill();
-  
-  // Head highlight for 3D effect
-  ctx.beginPath();
-  ctx.arc(player.x - 3, headY - 3, headSize * 0.4, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-  ctx.fill();
-  
-  // Draw player jersey number with 3D effect
-  const fontSize = Math.max(10, 14 * scale); // Scale font size with player
-  ctx.font = `bold ${fontSize}px Arial`;
-  ctx.textAlign = 'center';
-  
-  // Add a slight shadow to the number
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-  ctx.fillText(player.id.slice(0, 2), player.x + 1, player.y - legsHeight/2 + 1);
-  
-  // Draw the actual number
-  ctx.fillStyle = player.outfit.secondaryColor;
-  ctx.fillText(player.id.slice(0, 2), player.x, player.y - legsHeight/2);
-  
-  // Draw player name with 3D shadow effect
-  const nameFontSize = Math.max(8, 10 * scale);
-  ctx.font = `${nameFontSize}px Arial`;
-  
-  // Name shadow
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.fillText(player.name, player.x + 1, headY - headSize - 5 + 1);
-  
-  // Actual name
-  ctx.fillStyle = '#fff';
-  ctx.fillText(player.name, player.x, headY - headSize - 5);
-  
-  // Draw a ball if player has it
-  if (player.hasBall) {
-    // Calculate hand position based on player state
-    let handX, handY;
-    
-    if (state === 'jump') {
-      // Ball above head when jumping (for dunking)
-      handX = player.x;
-      handY = headY - headSize * 0.5 + heightOffset;
-    } else {
-      // Ball on side when running/idle
-      handX = player.x + jerseyWidth * 0.6;
-      handY = jerseyY + jerseyHeight * 0.5;
-    }
-    
-    // Draw a small basketball in player's hands
-    const ballSize = 7 * scale; // Scale ball with player
-    
-    ctx.beginPath();
-    ctx.arc(handX, handY, ballSize, 0, Math.PI * 2);
-    
-    // Add 3D lighting effect to the ball
-    const ballGradient = ctx.createRadialGradient(
-      handX - 2, handY - 2, 0,
-      handX, handY, ballSize
-    );
-    ballGradient.addColorStop(0, '#ff8933');
-    ballGradient.addColorStop(0.8, '#ff6600');
-    ballGradient.addColorStop(1, '#cc5200');
-    
-    ctx.fillStyle = ballGradient;
-    ctx.fill();
-    
-    // Ball outline
-    ctx.strokeStyle = '#000';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-  }
-  
-  // Draw jump animation
-  if (player.isJumping) {
-    // Arms raised for jumping/dunking
-    const armWidth = scale * 4; // Scale arm width with player
-    ctx.strokeStyle = player.outfit.primaryColor;
-    ctx.lineWidth = armWidth;
-    
-    // Left arm
-    ctx.beginPath();
-    ctx.moveTo(player.x - jerseyWidth * 0.3, jerseyY + jerseyHeight * 0.4);
-    ctx.lineTo(player.x - jerseyWidth * 0.5, jerseyY - jerseyHeight * 0.3);
-    ctx.stroke();
-    
-    // Right arm
-    ctx.beginPath();
-    ctx.moveTo(player.x + jerseyWidth * 0.3, jerseyY + jerseyHeight * 0.4);
-    ctx.lineTo(player.x + jerseyWidth * 0.5, jerseyY - jerseyHeight * 0.3);
-    ctx.stroke();
-  }
-}
-
-// Helper function to adjust colors for 3D effect
-function adjustColor(color, amount) {
-  // Convert hex to RGB
-  let r, g, b;
-  if (color.startsWith('#')) {
-    r = parseInt(color.substr(1, 2), 16);
-    g = parseInt(color.substr(3, 2), 16);
-    b = parseInt(color.substr(5, 2), 16);
-  } else {
-    // Handle named colors or non-hex
-    const tempElement = document.createElement('div');
-    tempElement.style.color = color;
-    document.body.appendChild(tempElement);
-    const computedColor = getComputedStyle(tempElement).color;
-    document.body.removeChild(tempElement);
-    
-    // Parse RGB format
-    const rgbMatch = computedColor.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-    if (rgbMatch) {
-      r = parseInt(rgbMatch[1]);
-      g = parseInt(rgbMatch[2]);
-      b = parseInt(rgbMatch[3]);
-    } else {
-      return color; // Return original if parsing fails
-    }
-  }
-  
-  // Adjust color
-  r = Math.max(0, Math.min(255, r + amount));
-  g = Math.max(0, Math.min(255, g + amount));
-  b = Math.max(0, Math.min(255, b + amount));
-  
-  // Convert back to hex
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
 // Game loop
 function gameLoop() {
-  // Clear canvas
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  
-  // Apply camera shake if active
-  if (cameraShake.active) {
-    const elapsedTime = Date.now() - cameraShake.startTime;
-    
-    if (elapsedTime < cameraShake.duration) {
-      // Calculate shake intensity based on remaining time (gradually decreases)
-      const progress = elapsedTime / cameraShake.duration;
-      const currentIntensity = cameraShake.intensity * (1 - progress);
-      
-      // Apply random offset to context
-      const offsetX = (Math.random() - 0.5) * currentIntensity * 2;
-      const offsetY = (Math.random() - 0.5) * currentIntensity * 2;
-      
-      ctx.save();
-      ctx.translate(offsetX, offsetY);
-    } else {
-      // Shake is complete
-      cameraShake.active = false;
-    }
-  }
-  
-  // Update dunk animations if active
-  if (dunkAnimations.active) {
-    updateDunkAnimation();
-  }
-  
-  // Update player position (only if not in dunk animation)
-  if (players[myPlayerId] && !dunkAnimations.active) {
-    updatePlayerPosition();
-  } else if (!players[myPlayerId]) {
-    // Debug: We don't have player ID yet
-    ctx.fillStyle = '#804000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'white';
-    ctx.font = '20px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('Waiting for player initialization...', canvas.width/2, canvas.height/2);
+  if (!threeIntegration) {
+    // Show loading message if 3D not ready yet
     requestAnimationFrame(gameLoop);
     return;
   }
   
-  // Debug: Log game state occasionally
-  if (Math.random() < 0.01) { // Log roughly every 100 frames
-    console.log('Game state:', {
-      playerCount: Object.keys(players).length,
-      myPlayer: players[myPlayerId],
-      basketball: basketball,
-      court: court
-    });
+  // Update player position (only if not in dunk animation)
+  if (players[myPlayerId] && !dunkAnimations.active && !threeIntegration.dunkAnimations.active) {
+    updatePlayerPosition();
   }
   
-  // Draw game elements
-  drawCourt();
-  drawPlayers();
-  drawBasketball();
+  // Update dunk animation
+  updateDunkAnimation();
   
-  // Update and draw particles (if available)
-  if (window.particleEffects) {
-    window.particleEffects.updateParticles();
-    window.particleEffects.drawParticles(ctx);
-  }
-  
-  // Restore context if camera shake was applied
-  if (cameraShake.active) {
-    ctx.restore();
-  }
+  // Render 3D scene
+  threeIntegration.render();
   
   // Request next frame
   requestAnimationFrame(gameLoop);
@@ -1264,27 +610,33 @@ function gameLoop() {
 
 // Initialize the game
 function init() {
-  console.log('Game initializing...');
+  console.log('Game initializing in 3D mode...');
   
-  // Make sure canvas is properly set up
-  canvas.width = 800;
-  canvas.height = 600;
-  
-  // Draw loading message
-  ctx.fillStyle = '#804000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'white';
-  ctx.font = '30px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText('Connecting to game server...', canvas.width/2, canvas.height/2);
-  
-  // Initialize game components
-  initEventListeners();
-  initSocketEvents();
-  
-  // Start the game loop
-  console.log('Starting game loop');
-  gameLoop();
+  try {
+    // Initialize 3D integration
+    threeIntegration = new ThreeGameIntegration();
+    console.log('3D integration successful');
+    
+    // Initialize game components
+    initEventListeners();
+    initSocketEvents();
+    
+    // Start the game loop
+    console.log('Starting 3D game loop');
+    gameLoop();
+  } catch (error) {
+    console.error('Failed to initialize 3D mode:', error);
+    // Show error message on canvas
+    const ctx = canvas.getContext('2d');
+    canvas.width = 800;
+    canvas.height = 600;
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = '20px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Failed to initialize 3D mode. Please refresh.', canvas.width/2, canvas.height/2);
+  }
 }
 
 // Start the game when the page loads

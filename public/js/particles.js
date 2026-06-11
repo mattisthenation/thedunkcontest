@@ -1,5 +1,8 @@
 // Particle system for visual effects
 
+// Global particles array
+let particles = [];
+
 // Particle class
 class Particle {
   constructor(x, y, color, velocity, gravity = 0.5, size = 4, decay = 0.02, rotationSpeed = 0) {

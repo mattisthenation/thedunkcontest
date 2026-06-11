@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voxel Basketball Players Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">Loading Voxel Players...</div>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- BufferGeometryUtils for merging geometries -->
+    <script>
+        // Add BufferGeometryUtils since it's not in the core library
+        THREE.BufferGeometryUtils = {
+            mergeBufferGeometries: function(geometries) {
+                const isIndexed = geometries[0].index !== null;
+                const attributesUsed = new Set(Object.keys(geometries[0].attributes));
+                const morphAttributesUsed = new Set(Object.keys(geometries[0].morphAttributes));
+                const attributes = {};
+                const morphAttributes = {};
+                const morphTargetsRelative = geometries[0].morphTargetsRelative;
+                const mergedGeometry = new THREE.BufferGeometry();
+                let offset = 0;
+
+                for (let i = 0; i < geometries.length; ++i) {
+                    const geometry = geometries[i];
+                    let attributesCount = 0;
+
+                    if (isIndexed !== (geometry.index !== null)) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferGeometries() failed with geometry at index ' + i + '. All geometries must have compatible attributes; make sure index attribute exists among all geometries, or in none of them.');
+                        return null;
+                    }
+
+                    for (const name in geometry.attributes) {
+                        if (!attributesUsed.has(name)) {
+                            console.error('THREE.BufferGeometryUtils: .mergeBufferGeometries() failed with geometry at index ' + i + '. All geometries must have compatible attributes; make sure "' + name + '" attribute exists among all geometries, or in none of them.');
+                            return null;
+                        }
+
+                        if (attributes[name] === undefined) attributes[name] = [];
+                        attributes[name].push(geometry.attributes[name]);
+                        attributesCount++;
+                    }
+
+                    if (attributesCount !== attributesUsed.size) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferGeometries() failed with geometry at index ' + i + '. Make sure all geometries have the same number of attributes.');
+                        return null;
+                    }
+
+                    if (morphTargetsRelative !== geometry.morphTargetsRelative) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferGeometries() failed with geometry at index ' + i + '. .morphTargetsRelative must be consistent throughout all geometries.');
+                        return null;
+                    }
+
+                    for (const name in geometry.morphAttributes) {
+                        if (!morphAttributesUsed.has(name)) {
+                            console.error('THREE.BufferGeometryUtils: .mergeBufferGeometries() failed with geometry at index ' + i + '.  .morphAttributes must be consistent throughout all geometries.');
+                            return null;
+                        }
+
+                        if (morphAttributes[name] === undefined) morphAttributes[name] = [];
+                        morphAttributes[name].push(geometry.morphAttributes[name]);
+                    }
+
+                    if (mergedGeometry.userData === undefined) mergedGeometry.userData = {};
+                    mergedGeometry.userData.mergedUserData = geometries.map(geometry => geometry.userData);
+
+                    if (isIndexed) {
+                        let indexOffset = 0;
+                        const mergedIndex = [];
+
+                        for (let i = 0; i < geometries.length; ++i) {
+                            const index = geometries[i].index;
+
+                            for (let j = 0; j < index.count; ++j) {
+                                mergedIndex.push(index.getX(j) + indexOffset);
+                            }
+
+                            indexOffset += geometries[i].attributes.position.count;
+                        }
+
+                        mergedGeometry.setIndex(mergedIndex);
+                    }
+
+                    offset += geometry.index ? geometry.index.count : geometry.attributes.position.count;
+                }
+
+                for (const name in attributes) {
+                    const mergedAttribute = this.mergeBufferAttributes(attributes[name]);
+
+                    if (!mergedAttribute) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferGeometries() failed while trying to merge the ' + name + ' attribute.');
+                        return null;
+                    }
+
+                    mergedGeometry.setAttribute(name, mergedAttribute);
+                }
+
+                for (const name in morphAttributes) {
+                    const numMorphTargets = morphAttributes[name][0].length;
+
+                    if (numMorphTargets === 0) break;
+
+                    mergedGeometry.morphAttributes = mergedGeometry.morphAttributes || {};
+                    mergedGeometry.morphAttributes[name] = [];
+
+                    for (let i = 0; i < numMorphTargets; ++i) {
+                        const morphAttributesToMerge = [];
+
+                        for (let j = 0; j < morphAttributes[name].length; ++j) {
+                            morphAttributesToMerge.push(morphAttributes[name][j][i]);
+                        }
+
+                        const mergedMorphAttribute = this.mergeBufferAttributes(morphAttributesToMerge);
+
+                        if (!mergedMorphAttribute) {
+                            console.error('THREE.BufferGeometryUtils: .mergeBufferGeometries() failed while trying to merge the ' + name + ' morphAttribute.');
+                            return null;
+                        }
+
+                        mergedGeometry.morphAttributes[name].push(mergedMorphAttribute);
+                    }
+                }
+
+                return mergedGeometry;
+            },
+
+            mergeBufferAttributes: function(attributes) {
+                let TypedArray;
+                let itemSize;
+                let normalized;
+                let arrayLength = 0;
+
+                for (let i = 0; i < attributes.length; ++i) {
+                    const attribute = attributes[i];
+
+                    if (attribute.isInterleavedBufferAttribute) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferAttributes() failed. InterleavedBufferAttributes are not supported.');
+                        return null;
+                    }
+
+                    if (TypedArray === undefined) TypedArray = attribute.array.constructor;
+                    if (TypedArray !== attribute.array.constructor) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferAttributes() failed. BufferAttribute.array must be of consistent array types across matching attributes.');
+                        return null;
+                    }
+
+                    if (itemSize === undefined) itemSize = attribute.itemSize;
+                    if (itemSize !== attribute.itemSize) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferAttributes() failed. BufferAttribute.itemSize must be consistent across matching attributes.');
+                        return null;
+                    }
+
+                    if (normalized === undefined) normalized = attribute.normalized;
+                    if (normalized !== attribute.normalized) {
+                        console.error('THREE.BufferGeometryUtils: .mergeBufferAttributes() failed. BufferAttribute.normalized must be consistent across matching attributes.');
+                        return null;
+                    }
+
+                    arrayLength += attribute.array.length;
+                }
+
+                const array = new TypedArray(arrayLength);
+                let offset = 0;
+
+                for (let i = 0; i < attributes.length; ++i) {
+                    array.set(attributes[i].array, offset);
+                    offset += attributes[i].array.length;
+                }
+
+                return new THREE.BufferAttribute(array, itemSize, normalized);
+            }
+        };
+    </script>
+    
+    <!-- Voxel Player Scripts -->
+    <script src="/js/three-voxel-utils.js"></script>
+    <script src="/js/three-voxel-player.js"></script>
+    <script src="/js/three-voxel-generator.js"></script>
+    <script src="/js/three-voxel-demo.js"></script>
+    
+    <script>
+        // Hide loading message when demo starts
+        setTimeout(() => {
+            const loading = document.getElementById('loading');
+            if (loading) loading.style.display = 'none';
+        }, 1000);
+    </script>
+</body>
+</html>

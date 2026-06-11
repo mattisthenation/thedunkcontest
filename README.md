@@ -1,67 +1,68 @@
-# The Dunk Contest with Three.js
+# The Dunk Contest - NBA Jam Style Multiplayer Game
 
-A multiplayer basketball dunk contest game with 3D graphics powered by Three.js.
+## Overview
+A multiplayer basketball game where players compete to pick up the ball and dunk it. Features NBA Jam-style sprite players on a 3D court.
 
-## Development Setup
+## Features
+- Multiplayer support via Socket.io
+- Procedurally generated sprite players with unique appearances
+- 3D basketball court with hoops
+- Pick up and dunk mechanics
+- Score tracking
+- Random player names and team colors
 
-This project now uses Vite for development and building the Three.js integration.
+## Setup
 
-### Installation
-
+1. Install dependencies:
 ```bash
-# Install dependencies
 npm install
 ```
 
-### Development Mode Options
-
-#### Option 1: Original Express Server (with Socket.io)
+2. Start the server:
 ```bash
-# Start the Express server
-npm run dev
+npm start
 ```
-This runs the game with the original Node.js server supporting multiplayer functionality.
 
-#### Option 2: Vite Development Server (for Three.js development)
-```bash
-# Start Vite development server
-npm run vite
+3. Open browser to:
 ```
-This runs a local development server with hot module replacement for faster Three.js development. Note that in this mode, Socket.io is mocked for local testing.
-
-### Building for Production
-
-```bash
-# Create production build
-./build.sh
+http://localhost:3000
 ```
-This creates an optimized production build in the `dist` directory.
+
+## How to Play
+
+- **WASD** - Move your player
+- **SPACE** - Jump
+- **E** - Pick up ball / Attempt dunk (when near hoop)
+- **Mouse** - Look around
+
+## Game Rules
+
+1. Players spawn with random appearances and names
+2. One basketball is available on the court
+3. Pick up the ball by moving near it and pressing E
+4. Dunk by getting near a hoop with the ball and pressing E
+5. Score 2 points for each successful dunk
+6. Ball resets to center after each dunk
 
 ## Project Structure
 
-- `public/` - Static files and client-side code
-  - `js/` - JavaScript files
-    - `three/` - Three.js component files
-  - `assets/` - Game assets (textures, models, etc.)
-  - `css/` - Stylesheets
+```
+/public/
+  index.html              - Main game page
+  /js/
+    game-client.js        - Main game logic
+    network-manager.js    - Socket.io client
+    sprite-player.js      - Sprite player class
+    sprite-player-generator.js - Player sprite generator
+    
+server.js                 - Game server
+package.json             - Dependencies
+```
 
-## Three.js Integration
+## Next Steps
 
-The game now features an optional 3D mode powered by Three.js. When running the game, click the "Enable 3D Mode" button to activate the 3D rendering.
-
-### Features
-- 3D basketball court with proper dimensions and markings
-- 3D basketball with physics and collision detection
-- Dynamic lighting and shadows
-- Particle effects for dunks and other actions
-- Enhanced camera animations for special moves
-
-## Development Workflow
-
-1. Use Vite for Three.js development (faster feedback cycle)
-2. Test multiplayer functionality with the Express server
-3. Build for production when ready to deploy
-
-## License
-
-[MIT License](LICENSE)
+- Add more animations (shooting, celebrating)
+- Implement power-ups
+- Add sound effects
+- Create tournament mode
+- Add team selection

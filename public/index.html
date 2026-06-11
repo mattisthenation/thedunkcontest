@@ -1,48 +1,137 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>The Dunk Contest</title>
-  <link rel="stylesheet" href="css/style.css">
-  <!-- Import Three.js as module -->
-  <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.151.3/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.151.3/examples/jsm/"
-      }
-    }
-  </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Dunk Contest - NBA Jam Style</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            background: #000;
+        }
+        
+        canvas {
+            display: block;
+        }
+        
+        #gameUI {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+        
+        #scoreBoard {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 3px solid #FFD700;
+            border-radius: 10px;
+            padding: 15px;
+            color: white;
+            min-width: 200px;
+        }
+        
+        #scoreBoard h3 {
+            margin: 0 0 10px 0;
+            color: #FFD700;
+            text-align: center;
+            text-shadow: 2px 2px 0 #000;
+        }
+        
+        .scoreEntry {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        
+        #instructions {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #FFD700;
+            border-radius: 5px;
+            padding: 10px;
+            color: #FFD700;
+            font-size: 12px;
+        }
+        
+        #connectionStatus {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            color: #00FF00;
+            font-size: 14px;
+        }
+        
+        #connectionStatus.disconnected {
+            color: #FF0000;
+        }
+        
+        #announcement {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 48px;
+            color: #FFD700;
+            text-shadow: 4px 4px 0 #000;
+            text-align: center;
+            display: none;
+            animation: pulse 0.5s ease-in-out;
+        }
+        
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(0.8); }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+            100% { transform: translate(-50%, -50%) scale(1); }
+        }
+    </style>
 </head>
 <body>
-  <div id="game-container">
-    <canvas id="game-canvas"></canvas>
-    <div id="scoreboard">
-      <h2>Scoreboard</h2>
-      <div id="player-scores"></div>
+    <div id="gameUI">
+        <div id="connectionStatus">Connecting...</div>
+        
+        <div id="scoreBoard">
+            <h3>SCORES</h3>
+            <div id="scoreList"></div>
+        </div>
+        
+        <div id="instructions">
+            <strong>CONTROLS:</strong><br>
+            WASD / Arrow Keys - Move<br>
+            SPACE - Jump<br>
+            E / Enter - Pick up ball / Dunk<br>
+            Mouse - Look around
+        </div>
+        
+        <div id="announcement"></div>
     </div>
-    <div id="game-info">
-      <p>Your name: <span id="player-name"></span></p>
-      <p>Score: <span id="player-score">0</span></p>
-      <div id="controls-info">
-        <p>Controls:</p>
-        <ul>
-          <li>Move: WASD or Arrow Keys</li>
-          <li>Jump/Dunk: Spacebar</li>
-          <li>Get Ball: E key</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="js/debug.js" type="module"></script>
-  <script src="js/sound.js" type="module"></script>
-  <script src="js/particles.js" type="module"></script>
-  <script src="js/game.js" type="module"></script>
-  <!-- Three.js integration -->
-  <script type="module" src="js/three-init.js"></script>
+    
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <!-- Socket.io -->
+    <script src="/socket.io/socket.io.js"></script>
+    
+    <!-- Game Scripts -->
+    <script src="/js/sprite-player-generator.js"></script>
+    <script src="/js/sprite-player.js"></script>
+    <script src="/js/ball-handler.js"></script>
+    <script src="/js/shot-system.js"></script>
+    <script src="/js/dunk-animation-system.js"></script>
+    <script src="/js/network-manager.js"></script>
+    <script src="/js/game-client.js"></script>
 </body>
 </html>
