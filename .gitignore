@@ -26,3 +26,4 @@ build/
 # Cache files
 .npm
 .eslintcache
+data/
