@@ -165,6 +165,27 @@ body { font-family: var(--font); color: #fff; }
 .cName { font-family: var(--display); font-size: 13px; letter-spacing: 1px; color: var(--gold); }
 .cLoc { font-size: 10px; letter-spacing: 1px; color: #8d96ad; }
 
+/* Leaderboard */
+#leaderboardMount { margin-top: 18px; }
+.lbTitle {
+  font-family: var(--display); font-size: 14px; letter-spacing: 3px;
+  color: #fff; border-bottom: 2px solid var(--gold); padding-bottom: 6px; margin-bottom: 10px;
+}
+.lbHead, .lbRow { display: flex; align-items: center; gap: 8px; padding: 4px 6px; font-size: 11px; }
+.lbHead { color: #8d96ad; font-weight: bold; letter-spacing: 1px; font-size: 9px; }
+.lbRow { background: #10141f; border-radius: 4px; margin-bottom: 3px; }
+.lbRow.me { background: rgba(255, 201, 40, 0.12); border: 1px solid rgba(255, 201, 40, 0.4); }
+.lbRow:nth-child(3) .lbRank { color: var(--gold); }
+.lbRank { flex: 0 0 22px; color: #8d96ad; font-weight: bold; }
+.lbName { flex: 1; font-weight: bold; }
+.lbStat { flex: 0 0 52px; text-align: right; color: var(--gold); font-weight: bold; }
+.lbStat.sm { flex: 0 0 44px; color: #b9c0d2; font-weight: normal; }
+.lbEmpty { padding: 10px 6px; font-size: 11px; color: #8d96ad; }
+.lbMe {
+  margin-top: 8px; padding: 8px 10px; font-size: 10px; letter-spacing: 1px;
+  color: var(--gold); background: #10141f; border-radius: 4px; border: 1px solid #2a3046;
+}
+
 .lobbyActions { margin-top: 28px; display: flex; gap: 14px; justify-content: center; }
 #playBtn {
   font-family: var(--display); font-size: 22px; letter-spacing: 4px;

@@ -54,6 +54,43 @@ function renderCourtGrid(courts) {
 // Until the first welcome arrives we render the static roster from shared/.
 import('/shared/courts.js').then(({ COURTS }) => renderCourtGrid(COURTS));
 
+// ---- leaderboard (lobby panel) --------------------------------------------
+
+async function renderLeaderboard() {
+  const mount = document.getElementById('leaderboardMount');
+  try {
+    const [board, me] = await Promise.all([
+      fetch('/api/leaderboard').then((r) => r.json()),
+      fetch(`/api/me/${token}`).then((r) => r.json()),
+    ]);
+    const rows = board.players.slice(0, 10).map((p) => `
+      <div class="lbRow${me && p.name === me.name && p.points === me.points ? ' me' : ''}">
+        <span class="lbRank">${p.rank}</span>
+        <span class="lbName">${esc(p.name)}</span>
+        <span class="lbStat" title="career points">${p.points}</span>
+        <span class="lbStat sm" title="dunks">${p.dunks}🏀</span>
+        <span class="lbStat sm" title="best streak">${p.best_streak}🔥</span>
+      </div>`).join('');
+    const mine = me ? `
+      <div class="lbMe">
+        YOU — RANK ${me.rank ?? '—'} · ${me.points} PTS · ${me.dunks} DUNKS ·
+        BEST STREAK ${me.best_streak} · BEST SESSION ${me.best_session}
+      </div>` : '';
+    mount.innerHTML = `
+      <h2 class="lbTitle">ALL-TIME GREATS</h2>
+      <div class="lbHead"><span class="lbRank">#</span><span class="lbName">BALLER</span>
+        <span class="lbStat">PTS</span><span class="lbStat sm">DNK</span><span class="lbStat sm">STK</span></div>
+      ${rows || '<div class="lbEmpty">No legends yet. Be the first.</div>'}${mine}`;
+  } catch {
+    mount.innerHTML = '';
+  }
+}
+renderLeaderboard();
+
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
 async function join() {
   const name = nameInput.value.trim() || 'Baller';
   localStorage.dunkName = name;
@@ -79,7 +116,10 @@ playBtn.addEventListener('click', () => join().catch((e) => {
 }));
 
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Escape' && inGame) lobby.classList.toggle('hidden');
+  if (e.code === 'Escape' && inGame) {
+    lobby.classList.toggle('hidden');
+    if (!lobby.classList.contains('hidden')) renderLeaderboard();
+  }
 });
 document.getElementById('resumeBtn').addEventListener('click', () => {
   if (inGame) lobby.classList.add('hidden');
