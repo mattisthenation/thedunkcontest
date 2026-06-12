@@ -1,0 +1,16 @@
+# Caddyfile — reverse proxy + automatic HTTPS for The Dunk Contest.
+# Install to /etc/caddy/Caddyfile, then: sudo systemctl reload caddy
+#
+# Caddy fetches and auto-renews the Let's Encrypt cert on its own — no
+# certbot, no cron. reverse_proxy upgrades WebSocket (socket.io) connections
+# automatically.
+
+thedunkcontest.com {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:3000
+}
+
+# Send www to the apex so there's one canonical URL.
+www.thedunkcontest.com {
+	redir https://thedunkcontest.com{uri} permanent
+}
