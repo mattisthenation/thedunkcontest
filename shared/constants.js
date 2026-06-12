@@ -27,7 +27,10 @@ export const NET = {
 };
 
 export const ROOM = {
-  cap: 10,               // players per court instance (see README: scaling model)
+  // Players per court instance (see README: scaling model). DUNK_ROOM_CAP
+  // exists for the single-mega-room load test; the guard keeps this module
+  // importable in the browser, where `process` doesn't exist.
+  cap: (typeof process !== 'undefined' && Number(process.env?.DUNK_ROOM_CAP)) || 10,
 };
 
 export const PLAYER = {
