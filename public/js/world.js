@@ -128,10 +128,11 @@ export class World {
       const zFree = s * (COURT.halfLength - 5.8);
       ctx.strokeRect(u(-2.45), Math.min(v(zEnd), v(zFree)), 4.9 * SCALE, Math.abs(v(zEnd) - v(zFree)));
       circle(ctx, u(0), v(zFree), 1.8 * SCALE);
-      // Three-point arc around the rim.
+      // Three-point arc, opening toward center court.
       const rim = COURT.rims[s < 0 ? 0 : 1];
       ctx.beginPath();
-      ctx.arc(u(rim.x), v(rim.z), COURT.threePointRadius * SCALE, 0, Math.PI * 2);
+      if (s < 0) ctx.arc(u(rim.x), v(rim.z), COURT.threePointRadius * SCALE, 0, Math.PI);
+      else ctx.arc(u(rim.x), v(rim.z), COURT.threePointRadius * SCALE, Math.PI, Math.PI * 2);
       ctx.stroke();
     }
 

@@ -126,7 +126,7 @@ export class Game {
     net.on('dunkScore', (ev) => {
       const p = this.players.get(ev.pid);
       this.hud.announceDunk(p?.name || '???', ev.label, ev.pid === this.myPid);
-      this.fx?.dunkImpact(COURT.rims[this.players.get(ev.pid)?.lastRim ?? 0] || COURT.rims[0]);
+      this.fx?.dunkImpact(ev.rim);
     });
 
     net.on('score', (ev) => {
@@ -141,11 +141,12 @@ export class Game {
         this.local.celebrateUntil = performance.now() + 1100;
         this.local.carrying = false;
       }
-      this.fx?.scoreBurst(ev.kind);
+      if (ev.kind !== 'dunk') this.fx?.scoreBurst(ev.kind, ev.rim);
     });
 
     net.on('miss', (ev) => {
       if (ev.pid === this.myPid) this.hud.announce('OFF THE IRON!', 1100, 'minor');
+      this.fx?.missClank(ev.rim ?? 0);
       const p = this.players.get(ev.pid);
       if (p && ev.fireOut) { p.fire = false; p.sprite.setFire(false); }
     });
@@ -172,7 +173,10 @@ export class Game {
     this.updateRemotes(dt);
     this.updateBall(dt);
     this.updateCamera(dt);
-    for (const p of this.players.values()) p.sprite.update(dt);
+    for (const p of this.players.values()) {
+      p.sprite.update(dt);
+      if (p.fire) this.fx?.fireTrail(p.sprite.pos);
+    }
   }
 
   updateLocal(dt) {

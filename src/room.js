@@ -311,7 +311,7 @@ export class Room {
     return p.fireUntil > this.now();
   }
 
-  registerMake(p, points, kind) {
+  registerMake(p, points, kind, rimIndex = 0) {
     p.score += points;
     p.stats.points += points;
     p.stats.makes += 1;
@@ -326,7 +326,7 @@ export class Room {
       ignited = true;
     }
     this.broadcast('ev', {
-      k: 'score', pid: p.pid, points, kind,
+      k: 'score', pid: p.pid, points, kind, rim: rimIndex,
       score: p.score, streak: p.consecutiveMakes,
       fire: this.isOnFire(p), ignited,
     });
@@ -337,7 +337,7 @@ export class Room {
     p.consecutiveMakes = 0;
     const wasOnFire = this.isOnFire(p);
     p.fireUntil = 0;
-    this.broadcast('ev', { k: 'miss', pid: p.pid, fireOut: wasOnFire });
+    this.broadcast('ev', { k: 'miss', pid: p.pid, fireOut: wasOnFire, rim: this.ball.rimIndex });
   }
 
   // After any score the ball checks in near center court — far from the
@@ -392,8 +392,8 @@ export class Room {
             c.noClampUntil = now + 800;
             ball.carrier = null;
             ball.shooter = null;
-            this.registerMake(c, 2, 'dunk');
-            this.broadcast('ev', { k: 'dunkScore', pid: c.pid, label });
+            this.registerMake(c, 2, 'dunk', rimIndex);
+            this.broadcast('ev', { k: 'dunkScore', pid: c.pid, label, rim: rimIndex });
             this.resetBallAfterScore();
           }
         } else {
@@ -434,7 +434,7 @@ export class Room {
           ball.pos = { x: rim.x, y: rim.y - 0.4, z: rim.z };
           ball.vel = { x: 0, y: -2, z: 0 };
           if (shooter) {
-            this.registerMake(shooter, ball.three ? 3 : 2, ball.three ? 'three' : 'shot');
+            this.registerMake(shooter, ball.three ? 3 : 2, ball.three ? 'three' : 'shot', ball.rimIndex);
             this.resetBallAfterScore();
           }
           return;

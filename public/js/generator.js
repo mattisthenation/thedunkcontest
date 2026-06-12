@@ -167,8 +167,10 @@ function drawFigure(ctx, cfg, pose) {
   const hairC = HAIR_COLORS[cfg.hairColor] || HAIR_COLORS[0];
   const torsoW = cfg.build === 0 ? 11 : cfg.build === 2 ? 15 : 13;
 
+  // `rise` is mostly cosmetic — the sprite's world position carries the real
+  // jump height — so keep it small to protect headroom for the big head.
   const rise = (pose.rise || 0);
-  const baseY = GROUND - rise * 2;
+  const baseY = GROUND - rise;
   const crouch = pose.crouch || 0;
   const hipY = baseY - 20 + crouch;
   const cx = 24 + (pose.lean || 0) * 0.5;
@@ -196,8 +198,8 @@ function drawFigure(ctx, cfg, pose) {
 
   // Head — the NBA Jam part. Enormous.
   const headBob = pose.headBob || 0;
-  const headH = 17, headW = 19;
-  const hx = cx - 9 + (pose.lean || 0);
+  const headH = 20, headW = 22;
+  const hx = cx - 10 + (pose.lean || 0);
   const hy = torsoTop - headH - 1 + headBob;
   g.head(hx, hy, headW, headH, skin, skinDark, hairC, cfg);
 
@@ -298,7 +300,12 @@ class Grid {
     const styles = {
       1: () => { this.rect(hx - 1, hy - 1, w - 4, 5, hairC); this.rect(hx - 1, hy + 2, 4, 8, hairC); },
       2: () => { this.rect(hx - 1, hy - 4, w - 2, 7, hairC); },
-      3: () => { this.rect(hx - 3, hy - 5, w + 4, 10, hairC); this.rect(hx - 4, hy + 1, 3, 7, hairC); },
+      3: () => {
+        // Afro: a big rounded halo around the skull.
+        this.rect(hx - 3, hy - 6, w + 5, 11, hairC);
+        this.rect(hx - 5, hy - 3, w + 9, 7, hairC);
+        this.rect(hx - 1, hy - 8, w + 1, 4, hairC);
+      },
       4: () => { this.rect(hx + 1, hy - 7, w - 7, 9, hairC); },
       5: () => { this.rect(hx - 1, hy - 1, w - 3, 3, hairC); },
       6: () => {

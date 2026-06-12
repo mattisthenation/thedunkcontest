@@ -7,13 +7,17 @@ import { World } from './world.js';
 import { Game } from './game.js';
 import { Hud } from './hud.js';
 import { Creator } from './creator.js';
+import { Fx } from './fx.js';
+import { Stage } from './stage.js';
 
 const token = localStorage.dunkToken || (localStorage.dunkToken = crypto.randomUUID());
 
 const world = new World(document.getElementById('game'));
 const net = new NetClient();
 const hud = new Hud();
-const game = new Game(world, net, hud, null);
+const fx = new Fx(world);
+const game = new Game(world, net, hud, fx);
+let stage = null;
 
 const lobby = document.getElementById('lobby');
 const courtGrid = document.getElementById('courtGrid');
@@ -60,6 +64,8 @@ async function join() {
 
   const def = getCourt(welcome.courtId);
   world.loadCourt(def);
+  stage?.dispose();
+  stage = new Stage(world.scene, def);
   game.applyWelcome(welcome);
   hud.setCourt(def, welcome.roomId);
   hud.setConnection(true);
@@ -86,7 +92,11 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  if (inGame) game.update(dt);
+  if (inGame) {
+    game.update(dt);
+    stage?.update(dt);
+    fx.update(dt);
+  }
   world.render();
 }
 requestAnimationFrame(frame);
