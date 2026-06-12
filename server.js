@@ -44,6 +44,28 @@ app.get('/api/me/:token', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`The Dunk Contest v3 — http://localhost:${PORT}`);
+// In production we bind to localhost and let the reverse proxy (Caddy) face
+// the internet; HOST defaults to all interfaces for local dev convenience.
+const HOST = process.env.HOST || '0.0.0.0';
+server.listen(PORT, HOST, () => {
+  console.log(`The Dunk Contest v3 — listening on ${HOST}:${PORT}`);
 });
+
+// Graceful shutdown. systemd sends SIGTERM on stop/restart (deploys). Without
+// this, points earned in the current sessions — held in memory and normally
+// flushed to SQLite on disconnect — would be lost on every redeploy.
+let shuttingDown = false;
+function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received — flushing session stats and shutting down…`);
+  manager.stop();
+  manager.flushAll();
+  db?.close();
+  io.close();
+  server.close(() => process.exit(0));
+  // Hard cap so a hung connection can't block the restart indefinitely.
+  setTimeout(() => process.exit(0), 8000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

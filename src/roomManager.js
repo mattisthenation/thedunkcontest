@@ -181,6 +181,15 @@ export class RoomManager {
     player.stats = { points: 0, makes: 0, misses: 0, dunks: 0, threes: 0, bestStreak: s.bestStreak };
   }
 
+  // Flush every connected player's pending stats — called on graceful
+  // shutdown so a deploy restart doesn't drop in-flight session points.
+  flushAll() {
+    if (!this.db) return;
+    for (const room of this.rooms.values()) {
+      for (const player of room.players.values()) this.persistStats(player);
+    }
+  }
+
   status() {
     let players = 0;
     const rooms = [...this.rooms.values()].map((r) => {

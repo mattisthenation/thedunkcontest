@@ -1,0 +1,34 @@
+# systemd unit for The Dunk Contest.
+# Install to /etc/systemd/system/dunkcontest.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now dunkcontest
+
+[Unit]
+Description=The Dunk Contest game server
+After=network.target
+
+[Service]
+Type=simple
+User=dunk
+WorkingDirectory=/opt/dunkcontest
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=HOST=127.0.0.1
+ExecStart=/usr/bin/node server.js
+
+# Keep it alive; restart on crash with a short backoff.
+Restart=on-failure
+RestartSec=2
+
+# Graceful stop: give the SIGTERM handler time to flush session stats.
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# Basic hardening. ProtectSystem=full keeps /usr /boot /etc read-only while
+# leaving /opt (where data/ and backups/ live) writable.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

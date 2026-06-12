@@ -27,3 +27,4 @@ build/
 .npm
 .eslintcache
 data/
+backups/
