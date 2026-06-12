@@ -1,137 +1,61 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Dunk Contest - NBA Jam Style</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            font-family: 'Courier New', monospace;
-            background: #000;
-        }
-        
-        canvas {
-            display: block;
-        }
-        
-        #gameUI {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            pointer-events: none;
-        }
-        
-        #scoreBoard {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            border: 3px solid #FFD700;
-            border-radius: 10px;
-            padding: 15px;
-            color: white;
-            min-width: 200px;
-        }
-        
-        #scoreBoard h3 {
-            margin: 0 0 10px 0;
-            color: #FFD700;
-            text-align: center;
-            text-shadow: 2px 2px 0 #000;
-        }
-        
-        .scoreEntry {
-            display: flex;
-            justify-content: space-between;
-            margin: 5px 0;
-            font-size: 14px;
-        }
-        
-        #instructions {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            border: 2px solid #FFD700;
-            border-radius: 5px;
-            padding: 10px;
-            color: #FFD700;
-            font-size: 12px;
-        }
-        
-        #connectionStatus {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 10px;
-            border-radius: 5px;
-            color: #00FF00;
-            font-size: 14px;
-        }
-        
-        #connectionStatus.disconnected {
-            color: #FF0000;
-        }
-        
-        #announcement {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            font-size: 48px;
-            color: #FFD700;
-            text-shadow: 4px 4px 0 #000;
-            text-align: center;
-            display: none;
-            animation: pulse 0.5s ease-in-out;
-        }
-        
-        @keyframes pulse {
-            0% { transform: translate(-50%, -50%) scale(0.8); }
-            50% { transform: translate(-50%, -50%) scale(1.2); }
-            100% { transform: translate(-50%, -50%) scale(1); }
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE DUNK CONTEST</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three.module.js" } }
+  </script>
 </head>
 <body>
-    <div id="gameUI">
-        <div id="connectionStatus">Connecting...</div>
-        
-        <div id="scoreBoard">
-            <h3>SCORES</h3>
-            <div id="scoreList"></div>
-        </div>
-        
-        <div id="instructions">
-            <strong>CONTROLS:</strong><br>
-            WASD / Arrow Keys - Move<br>
-            SPACE - Jump<br>
-            E / Enter - Pick up ball / Dunk<br>
-            Mouse - Look around
-        </div>
-        
-        <div id="announcement"></div>
+  <div id="game"></div>
+
+  <div id="gameUI">
+    <div id="connectionStatus" class="off">● CONNECTING…</div>
+    <div id="courtName"></div>
+
+    <div id="scoreBoard">
+      <h3>★ SCORES ★</h3>
+      <div id="scoreList"></div>
     </div>
-    
-    <!-- Three.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    
-    <!-- Socket.io -->
-    <script src="/socket.io/socket.io.js"></script>
-    
-    <!-- Game Scripts -->
-    <script src="/js/sprite-player-generator.js"></script>
-    <script src="/js/sprite-player.js"></script>
-    <script src="/js/ball-handler.js"></script>
-    <script src="/js/shot-system.js"></script>
-    <script src="/js/dunk-animation-system.js"></script>
-    <script src="/js/network-manager.js"></script>
-    <script src="/js/game-client.js"></script>
+
+    <div id="fireBadge">🔥 ON FIRE 🔥</div>
+    <div id="announcement"></div>
+
+    <div id="instructions">
+      <b>WASD</b> MOVE&nbsp;&nbsp;<b>SPACE</b> JUMP&nbsp;&nbsp;<b>E</b> SHOOT / DUNK / GRAB&nbsp;&nbsp;<b>ESC</b> MENU
+    </div>
+  </div>
+
+  <div id="lobby">
+    <div class="lobbyInner">
+      <h1>THE<br>DUNK<br>CONTEST</h1>
+      <p class="tag">PICK YOUR PLAYER · PICK YOUR COURT · GET BUCKETS</p>
+
+      <div class="lobbyCols">
+        <div class="lobbyCol">
+          <h2>YOUR BALLER</h2>
+          <input id="nameInput" maxlength="16" placeholder="ENTER NAME" autocomplete="off">
+          <div id="creatorMount"></div>
+        </div>
+
+        <div class="lobbyCol">
+          <h2>WORLD TOUR</h2>
+          <div id="courtGrid"></div>
+          <div id="leaderboardMount"></div>
+        </div>
+      </div>
+
+      <div class="lobbyActions">
+        <button id="playBtn">▶ &nbsp;PLAY</button>
+        <button id="resumeBtn" class="ghost">RESUME</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/main.js"></script>
 </body>
 </html>

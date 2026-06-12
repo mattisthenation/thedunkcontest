@@ -1,18 +1,21 @@
 {
   "name": "the-dunk-contest",
-  "version": "2.0.0",
-  "description": "NBA Jam style multiplayer basketball game",
+  "version": "3.0.0",
+  "description": "NBA Jam style multiplayer arcade basketball",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "nodemon server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test 'test/*.test.js'",
+    "loadtest": "node tools/loadtest.js"
   },
   "dependencies": {
+    "better-sqlite3": "^12.10.0",
     "express": "^4.18.2",
     "socket.io": "^4.6.1"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
-  },
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
+    "socket.io-client": "^4.8.3"
+  }
 }
