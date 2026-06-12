@@ -14,14 +14,18 @@ npm start          # http://localhost:3000
 Open the URL in any modern browser. Design your baller, pick a court, hit
 **PLAY**. Open a second browser/incognito window to see multiplayer live.
 
-**Controls:** WASD/arrows move · SPACE jump · **E** shoot / dunk / grab
-(one context button — near the rim it's a dunk) · ESC menu/court switch.
+**Controls:** WASD/arrows move · **SHIFT** turbo (watch the meter) ·
+SPACE jump — and jumping near a fresh shot **blocks** it ·
+**E** shoot with the ball, steal/grab without it · **F** dunk ·
+ESC menu/court switch.
 
-**Rules:** loose ball is anyone's. Buckets are 2, beyond the arc is 3, dunks
-end with the ball checked back in at half court. Three straight makes and
-you're **ON FIRE** (accuracy boost + the flashy end of the dunk table) until
-you miss or it burns out. Career stats and the all-time leaderboard persist
-across restarts.
+**Rules:** loose ball is anyone's; carriers can be stripped (800ms fresh-
+possession protection, per-thief cooldown). Buckets are 2, beyond the arc is
+3, dunks end with the ball checked back in at half court. **TURBO + F**
+launches from further out and deals from the flashy dunk tier (windmill /
+360 / rim hang). Three straight makes and you're **ON FIRE** (accuracy boost
++ flashy dunks for free) until you miss or it burns out. Career stats and
+the all-time leaderboard persist across restarts.
 
 ```bash
 npm test           # 20 unit tests (simulation rules + persistence)

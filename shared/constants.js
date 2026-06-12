@@ -8,10 +8,11 @@ export const COURT = {
   boundZ: 14.5,
   rimHeight: 3.05,
   rimRadius: 0.45,
-  // Rim centers. Backboards sit 1.2 behind each rim at z = ±13.
+  // Rim centers sit one bracket-length in front of the backboard face
+  // (board at ±13, face ≈ ±12.97, rim edge at ±12.75 + 0.22 bracket).
   rims: [
-    { x: 0, y: 3.05, z: -11.8 },
-    { x: 0, y: 3.05, z: 11.8 },
+    { x: 0, y: 3.05, z: -12.3 },
+    { x: 0, y: 3.05, z: 12.3 },
   ],
   backboardZ: 13,
   threePointRadius: 6.75,
@@ -40,6 +41,25 @@ export const PLAYER = {
   height: 2.0,
   pickupRadius: 2.2,     // explicit grab (action)
   magnetRadius: 1.1,     // walk-over auto-pickup
+};
+
+export const TURBO = {
+  multiplier: 1.45,      // held-SHIFT speed boost
+  drainMs: 2600,         // full meter burns in ~2.6s
+  rechargeMs: 4800,      // empty → full
+};
+
+export const STEAL = {
+  radius: 1.6,           // reach to strip a carrier
+  chance: 0.4,
+  cooldownMs: 1500,      // per-thief attempt cooldown
+  protectMs: 800,        // fresh possession can't be stripped
+};
+
+export const BLOCK = {
+  radius: 1.8,           // reach from an airborne defender to the ball
+  windowMs: 700,         // shots are blockable this long after release
+  minAirY: 0.45,         // defender must actually be off the ground
 };
 
 export const BALL = {
@@ -72,15 +92,17 @@ export const FIRE = {
   durationMs: 45_000,
 };
 
-// Dunk choreography lengths. The server treats these as authoritative timers;
-// clients animate to match.
+// Dunk choreography. The server treats `ms` as the authoritative timer;
+// clients animate to match (spins = full sprite rotations, extraHeight is
+// added to the arc peak, hang holds at the rim before the drop).
+// Turbo-tier dunks require holding TURBO (or being on fire).
 export const DUNKS = {
-  basic: { ms: 750, label: 'SLAM' },
-  tomahawk: { ms: 850, label: 'TOMAHAWK' },
-  windmill: { ms: 950, label: 'WINDMILL' },
-  spin360: { ms: 1050, label: '360' },
-  reverse: { ms: 900, label: 'REVERSE JAM' },
-  rimhang: { ms: 1200, label: 'RIM ROCKER' },
+  basic: { ms: 750, label: 'SLAM', tier: 0, spins: 0, extraHeight: 0, hang: 0 },
+  tomahawk: { ms: 880, label: 'TOMAHAWK', tier: 0, spins: 0, extraHeight: 0.5, hang: 0.1 },
+  reverse: { ms: 920, label: 'REVERSE JAM', tier: 0, spins: 0.5, extraHeight: 0.3, hang: 0.08 },
+  windmill: { ms: 1050, label: 'WINDMILL', tier: 1, spins: 1, extraHeight: 0.7, hang: 0.12 },
+  spin360: { ms: 1150, label: '360', tier: 1, spins: 1, extraHeight: 0.9, hang: 0.1 },
+  rimhang: { ms: 1450, label: 'RIM ROCKER', tier: 1, spins: 0.5, extraHeight: 1.1, hang: 0.45 },
 };
 
 // Wire-format animation codes (snapshot field `a`).

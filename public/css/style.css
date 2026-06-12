@@ -77,6 +77,25 @@ body { font-family: var(--font); color: #fff; }
 #announcement.show.fire { color: #ff5a1e; text-shadow: 3px 3px 0 #000, 0 0 40px #ff3c00; }
 #announcement.show.minor { font-size: 24px; color: #cfd6e6; text-shadow: 2px 2px 0 #000; }
 
+#turboMeter {
+  position: absolute; bottom: 14px; left: 14px;
+  display: flex; align-items: center; gap: 8px;
+  background: var(--panel); padding: 8px 12px; border-radius: 4px;
+}
+#turboMeter span {
+  font-family: var(--display); font-size: 9px; letter-spacing: 2px; color: #8d96ad;
+}
+#turboBar {
+  width: 110px; height: 10px; background: #060810;
+  border: 1px solid #2a3046; border-radius: 5px; overflow: hidden;
+}
+#turboFill {
+  height: 100%; width: 100%; background: linear-gradient(90deg, #2e6fe8, #54f0ff);
+  transition: width 0.1s linear;
+}
+#turboFill.burning { background: linear-gradient(90deg, #ff7a3c, #ffc928); }
+#turboFill.full { box-shadow: 0 0 8px #54f0ff; }
+
 #instructions {
   position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
   font-size: 11px; letter-spacing: 1px; color: #b9c0d2;

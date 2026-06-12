@@ -53,7 +53,16 @@ export class CharacterSprite {
     this.applyFrame();
   }
 
-  setFacing(f) { this.facing = f; }
+  setFacing(f) {
+    if (this.facing === f) return;
+    this.facing = f;
+    this.applyFrame();
+  }
+
+  // Screen-space spin for 360/windmill dunk choreography (radians).
+  setSpin(rad) {
+    this.material.rotation = rad;
+  }
   setFire(on) {
     if (this.fire === on) return;
     this.fire = on;
@@ -71,15 +80,23 @@ export class CharacterSprite {
       this.applyFrame();
     }
     this.sprite.position.copy(this.pos);
-    this.sprite.scale.x = this.baseScale.x * (this.facing >= 0 ? 1 : -1);
     this.nameTag.position.set(this.pos.x, this.pos.y + 2.95, this.pos.z);
   }
 
+  // Facing is mirrored in UV space: THREE.Sprite ignores negative scale (the
+  // shader rebuilds scale from matrix column lengths, losing the sign), so a
+  // left-facing frame is the same sheet cell sampled right-to-left.
   applyFrame() {
     const a = this.animations[this.anim] || this.animations[ANIM.idle];
     const col = a.start + Math.min(this.frame, a.frames - 1);
-    this.texture.offset.set(col / SHEET.cols, 1 - (a.row + 1) / SHEET.rows);
-    this.texture.repeat.set(1 / SHEET.cols, 1 / SHEET.rows);
+    const v = 1 - (a.row + 1) / SHEET.rows;
+    if (this.facing >= 0) {
+      this.texture.offset.set(col / SHEET.cols, v);
+      this.texture.repeat.set(1 / SHEET.cols, 1 / SHEET.rows);
+    } else {
+      this.texture.offset.set((col + 1) / SHEET.cols, v);
+      this.texture.repeat.set(-1 / SHEET.cols, 1 / SHEET.rows);
+    }
   }
 
   dispose() {

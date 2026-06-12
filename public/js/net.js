@@ -55,8 +55,8 @@ export class NetClient {
     });
   }
 
-  sendAction(type) {
-    this.socket.emit('action', { type });
+  sendAction(type, extra = {}) {
+    this.socket.emit('action', { type, ...extra });
   }
 
   on(kind, fn) {

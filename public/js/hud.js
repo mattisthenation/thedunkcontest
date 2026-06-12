@@ -16,9 +16,15 @@ export class Hud {
       scores: document.getElementById('scoreList'),
       banner: document.getElementById('announcement'),
       fire: document.getElementById('fireBadge'),
+      turbo: document.getElementById('turboFill'),
     };
     this.bannerTimer = null;
     this.bannerPriority = 0;
+  }
+
+  setTurbo(value, burning) {
+    this.el.turbo.style.width = `${Math.round(value * 100)}%`;
+    this.el.turbo.className = burning ? 'burning' : value >= 0.99 ? 'full' : '';
   }
 
   setConnection(up) {

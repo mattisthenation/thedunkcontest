@@ -9,7 +9,7 @@
 
 import {
   COURT, NET, ROOM, PLAYER, BALL, ZONES, ACCURACY, FIRE, DUNKS,
-  ANIM, BALL_STATE, dist2D, nearestRim,
+  STEAL, BLOCK, ANIM, BALL_STATE, dist2D, nearestRim,
 } from '../shared/constants.js';
 
 const TICK_DT = 1 / NET.tickRate;
@@ -182,7 +182,8 @@ export class Room {
     switch (action.type) {
       case 'pickup': return this.tryPickup(playerId);
       case 'shoot': return this.tryShoot(playerId);
-      case 'dunk': return this.tryDunk(playerId);
+      case 'dunk': return this.tryDunk(playerId, !!action.turbo);
+      case 'steal': return this.trySteal(playerId);
     }
   }
 
@@ -217,7 +218,32 @@ export class Room {
     ball.state = BALL_STATE.carried;
     ball.carrier = p.id;
     ball.vel = { x: 0, y: 0, z: 0 };
+    ball.protectUntil = this.now() + STEAL.protectMs;
     this.broadcast('ev', { k: 'pickup', pid: p.pid });
+  }
+
+  // ---- stealing -----------------------------------------------------------
+
+  trySteal(playerId) {
+    const thief = this.players.get(playerId);
+    const ball = this.ball;
+    if (!thief || !thief.connected) return;
+    if (ball.state !== BALL_STATE.carried) return this.deny(playerId, 'steal', 'noball');
+    const carrier = this.players.get(ball.carrier);
+    if (!carrier || carrier === thief || carrier.dunk) return;
+    const now = this.now();
+    if (now < (thief.nextStealAt || 0)) return;
+    if (dist2D(thief.pos, carrier.pos) > STEAL.radius) {
+      return this.deny(playerId, 'steal', 'far');
+    }
+    thief.nextStealAt = now + STEAL.cooldownMs;
+    if (now < (ball.protectUntil || 0) || this.random() >= STEAL.chance) {
+      return this.broadcast('ev', { k: 'stealMiss', pid: thief.pid, from: carrier.pid });
+    }
+    // Stripping the rock also ends the victim's streak pressure: their
+    // possession is gone but their make streak survives (arcade-kind).
+    this.givePossession(thief);
+    this.broadcast('ev', { k: 'steal', pid: thief.pid, from: carrier.pid });
   }
 
   // ---- shooting ---------------------------------------------------------
@@ -228,10 +254,6 @@ export class Room {
     if (!p || !p.connected) return;
     if (ball.carrier !== playerId) return this.deny(playerId, 'shoot', 'noball');
     if (p.dunk) return;
-
-    // One context button: a shot requested from inside the dunk zone IS a
-    // dunk. Server-side, so client and server can never disagree.
-    if (nearestRim(p.pos).dist <= ZONES.dunk) return this.tryDunk(playerId);
 
     const { rim, dist, index } = nearestRim(p.pos);
     const three = dist > COURT.threePointRadius;
@@ -277,17 +299,19 @@ export class Room {
 
   // ---- dunking ----------------------------------------------------------
 
-  tryDunk(playerId) {
+  tryDunk(playerId, turbo = false) {
     const p = this.players.get(playerId);
     const ball = this.ball;
     if (!p || !p.connected) return;
     if (ball.carrier !== playerId) return this.deny(playerId, 'dunk', 'noball');
     if (p.dunk) return;
 
-    const { rim, dist, index } = nearestRim(p.pos);
-    if (dist > ZONES.dunk + 0.5) return this.deny(playerId, 'dunk', 'far');
+    // Turbo stretches the takeoff range — you can launch from further out.
+    const { dist, index } = nearestRim(p.pos);
+    const reach = ZONES.dunk + (turbo ? 1.3 : 0.5);
+    if (dist > reach) return this.deny(playerId, 'dunk', 'far');
 
-    const type = this.pickDunkType(p);
+    const type = this.pickDunkType(p, turbo);
     const ms = DUNKS[type].ms;
     p.dunk = { type, rimIndex: index, until: this.now() + ms };
     ball.state = BALL_STATE.dunk;
@@ -295,13 +319,13 @@ export class Room {
     ball.shooter = playerId;
     ball.rimIndex = index;
 
-    this.broadcast('ev', { k: 'dunkStart', pid: p.pid, type, rim: index, ms });
+    this.broadcast('ev', { k: 'dunkStart', pid: p.pid, type, rim: index, ms, turbo });
   }
 
-  pickDunkType(p) {
-    const types = Object.keys(DUNKS);
-    // On fire unlocks the flashier end of the table more often.
-    const pool = this.isOnFire(p) ? types : types.slice(0, 4);
+  // Turbo (or being on fire) unlocks the tier-1 table: windmill/360/rimhang.
+  pickDunkType(p, turbo = false) {
+    const flashy = turbo || this.isOnFire(p);
+    const pool = Object.keys(DUNKS).filter((t) => DUNKS[t].tier === (flashy ? 1 : 0));
     return pool[Math.floor(this.random() * pool.length)];
   }
 
@@ -421,6 +445,29 @@ export class Room {
     ball.pos.z += ball.vel.z * TICK_DT;
 
     if (ball.state === BALL_STATE.flight) {
+      // Blocks: inside the window after release, an airborne non-shooter
+      // close enough to the ball swats it down. SPACE is both jump and
+      // block — timing the leap IS the defensive skill.
+      if (now - ball.flightStart < BLOCK.windowMs) {
+        for (const d of this.players.values()) {
+          if (!d.connected || d.id === ball.shooter || d.pos.y < BLOCK.minAirY) continue;
+          const reach = { x: d.pos.x, y: d.pos.y + 2.1, z: d.pos.z };
+          const dx = reach.x - ball.pos.x, dy = reach.y - ball.pos.y, dz = reach.z - ball.pos.z;
+          if (dx * dx + dy * dy + dz * dz < BLOCK.radius * BLOCK.radius) {
+            const shooter = this.players.get(ball.shooter);
+            const away = Math.atan2(ball.pos.z - d.pos.z, ball.pos.x - d.pos.x);
+            ball.vel = { x: Math.cos(away) * 6, y: -1.5, z: Math.sin(away) * 6 };
+            ball.state = BALL_STATE.free;
+            ball.shooter = null;
+            if (shooter) this.registerMiss(shooter);
+            this.broadcast('ev', {
+              k: 'block', pid: d.pid, on: shooter ? shooter.pid : -1,
+            });
+            return;
+          }
+        }
+      }
+
       const rim = COURT.rims[ball.rimIndex];
       const descending = ball.vel.y < 0;
       const crossedRim = descending && ball.prevY > rim.y && ball.pos.y <= rim.y;

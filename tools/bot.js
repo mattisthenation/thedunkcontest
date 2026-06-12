@@ -73,7 +73,9 @@ export class Bot {
     if (Date.now() < this.dunkUntil) return;
     if (this.carrying) {
       const { dist } = nearestRim(this.pos);
-      if (dist <= ZONES.dunk - 0.4 || Math.random() < 0.02) {
+      if (dist <= ZONES.dunk - 0.4) {
+        this.socket.emit('action', { type: 'dunk', turbo: Math.random() < 0.5 });
+      } else if (Math.random() < 0.02) {
         this.socket.emit('action', { type: 'shoot' });
       } else {
         this.seek(nearestRim(this.pos).rim, dt);
@@ -84,8 +86,11 @@ export class Bot {
         this.socket.emit('action', { type: 'pickup' });
       }
     } else {
-      // Wander toward mid court.
-      this.seek({ x: (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 12 }, dt, 0.4);
+      // Defense: chase the ball (≈ the carrier) and swipe at it.
+      this.seek(this.ball, dt, 0.8);
+      if (dist2D(this.pos, this.ball) < 1.5 && Math.random() < 0.3) {
+        this.socket.emit('action', { type: 'steal' });
+      }
     }
     this.socket.emit('input', {
       x: r2(this.pos.x), y: 0, z: r2(this.pos.z),

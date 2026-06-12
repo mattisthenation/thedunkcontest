@@ -267,3 +267,68 @@ test('projectile lands on target', () => {
   }
   assert.ok(closest < 0.15, `trajectory passes within ${closest.toFixed(3)} of rim`);
 });
+
+test('steal: proximity + cooldown + protection window, server-resolved', () => {
+  const h = makeRoom({ random: () => 0.1 }); // under STEAL.chance → success
+  const a = join(h.room, 'a');
+  const b = join(h.room, 'b');
+  a.pos = { x: 0, y: 0, z: 0 };
+  give(h, a);
+
+  // Fresh possession is protected.
+  b.pos = { x: 0.5, y: 0, z: 0 };
+  h.room.trySteal('b');
+  assert.equal(h.room.ball.carrier, 'a', 'protected possession survives');
+  assert.ok(h.events.some((e) => e.k === 'stealMiss'));
+
+  // After protection + cooldown: too far fails, close succeeds.
+  h.advance(2000);
+  b.pos = { x: 8, y: 0, z: 8 };
+  h.room.trySteal('b');
+  assert.equal(h.direct.at(-1).data.reason, 'far');
+  b.pos = { x: 0.6, y: 0, z: 0 };
+  h.room.trySteal('b');
+  assert.equal(h.room.ball.carrier, 'b');
+  assert.ok(h.events.some((e) => e.k === 'steal' && e.from === a.pid));
+});
+
+test('block: airborne defender near a fresh shot swats it down', () => {
+  const h = makeRoom({ random: () => 0.01 }); // shot would be a make
+  const a = join(h.room, 'a');
+  const d = join(h.room, 'd');
+  a.pos = { x: 0, y: 0, z: -8 };
+  give(h, a);
+  h.room.tryShoot('a');
+
+  // Defender leaps right into the release.
+  d.pos = { x: 0, y: 1.2, z: -8.3 };
+  h.advance(200);
+  const block = h.events.find((e) => e.k === 'block');
+  assert.ok(block, 'block event fired');
+  assert.equal(block.pid, d.pid);
+  assert.equal(h.room.ball.state, BALL_STATE.free);
+  assert.ok(h.events.some((e) => e.k === 'miss'), 'shooter charged with the miss');
+  h.advance(4000);
+  assert.equal(a.score, 0, 'blocked shot never scores');
+});
+
+test('turbo dunks deal from the flashy tier; normal dunks stay basic-tier', () => {
+  const h = makeRoom();
+  const a = join(h.room, 'a');
+  a.pos = { x: 0, y: 0, z: -10.5 };
+  give(h, a);
+  h.room.tryDunk('a', true);
+  const start = h.events.find((e) => e.k === 'dunkStart');
+  assert.equal(DUNKS[start.type].tier, 1, `turbo dealt ${start.type}`);
+  assert.equal(start.turbo, true);
+
+  h.advance(start.ms + 200);
+  const h2 = makeRoom();
+  const b = join(h2.room, 'b');
+  b.pos = { x: 0, y: 0, z: -10.5 };
+  h2.room.ball.pos = { ...b.pos, y: 0.3 };
+  h2.room.tryPickup('b');
+  h2.room.tryDunk('b', false);
+  const s2 = h2.events.find((e) => e.k === 'dunkStart');
+  assert.equal(DUNKS[s2.type].tier, 0, `normal dealt ${s2.type}`);
+});

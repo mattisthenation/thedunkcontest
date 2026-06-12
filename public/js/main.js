@@ -19,6 +19,9 @@ const fx = new Fx(world);
 const game = new Game(world, net, hud, fx);
 let stage = null;
 
+// Debug/QA handle (read-only usage expected).
+window.__dunk = { game, net, world };
+
 const lobby = document.getElementById('lobby');
 const courtGrid = document.getElementById('courtGrid');
 const nameInput = document.getElementById('nameInput');

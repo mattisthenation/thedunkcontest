@@ -4,7 +4,7 @@
 // (possession, scores, dunks, fire) arrive as server events.
 
 import * as THREE from 'three';
-import { COURT, PLAYER, ANIM, BALL_STATE, ZONES, nearestRim, dist2D } from '/shared/constants.js';
+import { COURT, PLAYER, TURBO, DUNKS, ANIM, BALL_STATE } from '/shared/constants.js';
 import { CharacterSprite } from './sprites.js';
 
 export class Game {
@@ -26,13 +26,19 @@ export class Game {
       facing: 1,
       anim: ANIM.idle,
       carrying: false,
-      dunk: null,             // {from, rim, start, ms, type}
+      dunk: null,             // {from, rim, start, ms, type, def}
       celebrateUntil: 0,
       shootPoseUntil: 0,
+      turbo: 1,               // meter 0..1
     };
+    this.activeDunks = new Map(); // pid -> {start, ms, def, dir} for remote spin
     this.keys = {};
     this.bindInput();
     this.bindNet();
+  }
+
+  turboActive() {
+    return (this.keys.ShiftLeft || this.keys.ShiftRight) && this.local.turbo > 0.02;
   }
 
   // ---- session ----------------------------------------------------------
@@ -64,6 +70,7 @@ export class Game {
     if (!p) return;
     p.sprite.dispose();
     this.players.delete(pid);
+    this.activeDunks.delete(pid);
     this.hud.setRoster(this.players, this.myPid);
   }
 
@@ -74,21 +81,30 @@ export class Game {
       if (e.repeat) return;
       this.keys[e.code] = true;
       if (e.code === 'KeyE' || e.code === 'Enter') this.actionButton();
+      if (e.code === 'KeyF' || e.code === 'KeyQ') this.dunkButton();
       if (e.code === 'Space') e.preventDefault();
     });
     document.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
   }
 
+  // E: shoot with the ball, steal/grab without it.
   actionButton() {
     if (this.local.dunk) return;
     if (this.local.carrying) {
-      // Server decides shoot vs dunk; we pose optimistically.
       this.net.sendAction('shoot');
-      const { dist } = nearestRim(this.local.pos);
-      if (dist > ZONES.dunk) this.local.shootPoseUntil = performance.now() + 450;
+      this.local.shootPoseUntil = performance.now() + 450;
+    } else if (this.ballCarrierPid !== -1 && this.ballCarrierPid !== this.myPid) {
+      this.net.sendAction('steal');
     } else {
       this.net.sendAction('pickup');
     }
+  }
+
+  // F/Q: dunk. With TURBO held you launch from further out and the server
+  // deals from the flashy tier.
+  dunkButton() {
+    if (this.local.dunk || !this.local.carrying) return;
+    this.net.sendAction('dunk', { turbo: this.turboActive() });
   }
 
   // ---- server events ----------------------------------------------------
@@ -115,12 +131,42 @@ export class Game {
 
     net.on('dunkStart', (ev) => {
       const rim = COURT.rims[ev.rim];
+      const def = DUNKS[ev.type] || DUNKS.basic;
       if (ev.pid === this.myPid) {
         this.local.dunk = {
-          from: { ...this.local.pos }, rim, start: performance.now(), ms: ev.ms, type: ev.type,
+          from: { ...this.local.pos }, rim, start: performance.now(), ms: ev.ms, def,
         };
+      } else {
+        // Remember remote dunks so their sprites spin through the same arc.
+        this.activeDunks.set(ev.pid, { start: performance.now(), ms: ev.ms, def });
       }
       this.fx?.dunkTakeoff(rim);
+    });
+
+    net.on('steal', (ev) => {
+      const thief = this.players.get(ev.pid);
+      if (ev.pid === this.myPid) {
+        this.hud.announce('PICKED HIS POCKET!', 1400, 'normal');
+      } else if (ev.from === this.myPid) {
+        this.local.carrying = false;
+        this.hud.announce('STRIPPED!', 1200, 'minor');
+      } else {
+        this.hud.announce(`${thief?.name || '???'} WITH THE STEAL!`, 1200, 'minor');
+      }
+    });
+
+    net.on('stealMiss', (ev) => {
+      if (ev.pid === this.myPid) this.hud.announce('SWIPED AT AIR!', 800, 'minor');
+    });
+
+    net.on('block', (ev) => {
+      const blocker = this.players.get(ev.pid);
+      this.hud.announce(
+        ev.pid === this.myPid ? 'REJECTED!' : `${blocker?.name || '???'} — REJECTED!`,
+        1600, 'dunk',
+      );
+      this.fx?.missClank(0);
+      if (ev.on === this.myPid) this.local.carrying = false;
     });
 
     net.on('dunkScore', (ev) => {
@@ -184,25 +230,42 @@ export class Game {
     const now = performance.now();
 
     if (L.dunk) {
-      // Choreographed flight: parabolic arc from takeoff to the rim.
+      // Choreographed flight, shaped by the dunk type: rise to the rim
+      // (higher for flashy tiers), spin, optionally hang on the rim, drop.
+      const { def } = L.dunk;
       const t = Math.min(1, (now - L.dunk.start) / L.dunk.ms);
-      const flight = Math.min(1, t / 0.82); // reach rim, then hang/land
+      const flightEnd = 0.85 - def.hang;
+      const flight = Math.min(1, t / flightEnd);
       const ease = 1 - (1 - flight) * (1 - flight);
       const towardCenter = L.dunk.rim.z > 0 ? -0.7 : 0.7;
       L.pos.x = L.dunk.from.x + (L.dunk.rim.x - L.dunk.from.x) * ease;
       L.pos.z = L.dunk.from.z + (L.dunk.rim.z + towardCenter - L.dunk.from.z) * ease;
-      L.pos.y = Math.sin(Math.min(flight, 1) * Math.PI * 0.92) * (L.dunk.rim.y - 0.8);
+
+      const peak = L.dunk.rim.y - 0.8 + def.extraHeight;
+      if (t < flightEnd) {
+        L.pos.y = Math.sin(flight * Math.PI * 0.62) * peak;
+      } else if (t < flightEnd + def.hang) {
+        L.pos.y = L.dunk.rim.y - 1.05; // hanging on the iron
+      } else {
+        const drop = (t - flightEnd - def.hang) / Math.max(0.01, 1 - flightEnd - def.hang);
+        L.pos.y = (L.dunk.rim.y - 1.05) * (1 - drop * drop);
+      }
+
       L.anim = ANIM.dunk;
       L.facing = (L.dunk.rim.z - L.dunk.from.z) >= 0 ? 1 : -1;
+      const me = this.players.get(this.myPid);
+      me?.sprite.setSpin(dunkSpin(def, flight, L.facing));
       if (t >= 1) {
         L.pos.y = 0;
         L.dunk = null;
         L.carrying = false;
+        me?.sprite.setSpin(0);
       }
     } else {
       // Screen-relative movement: camera sits at -x, so screen-right is +z
       // and "up the court" is +x.
-      const speed = PLAYER.maxSpeed;
+      const turbo = this.turboActive();
+      const speed = PLAYER.maxSpeed * (turbo ? TURBO.multiplier : 1);
       let vx = 0, vz = 0;
       if (this.keys.KeyW || this.keys.ArrowUp) vx = speed;
       if (this.keys.KeyS || this.keys.ArrowDown) vx = -speed;
@@ -223,6 +286,12 @@ export class Game {
       else if (vz < -0.1) L.facing = -1;
 
       const moving = Math.abs(vx) > 0.1 || Math.abs(vz) > 0.1;
+
+      // Turbo meter: drains while boosting on the move, recharges otherwise.
+      if (turbo && moving) L.turbo = Math.max(0, L.turbo - (dt * 1000) / TURBO.drainMs);
+      else L.turbo = Math.min(1, L.turbo + (dt * 1000) / TURBO.rechargeMs);
+      this.hud.setTurbo(L.turbo, turbo && moving);
+
       if (now < L.shootPoseUntil) L.anim = ANIM.shoot;
       else if (now < L.celebrateUntil && !moving) L.anim = ANIM.celebrate;
       else if (L.pos.y > 0.05) L.anim = ANIM.jump;
@@ -264,6 +333,18 @@ export class Game {
       p.sprite.setFacing(r2[5]);
       p.sprite.setFire(!!(r2[6] & 1));
       p.last = [x, y, z];
+
+      // Remote dunkers spin through the same choreography.
+      const dunk = this.activeDunks.get(pid);
+      if (dunk) {
+        const dt2 = (performance.now() - dunk.start) / dunk.ms;
+        if (dt2 >= 1) {
+          this.activeDunks.delete(pid);
+          p.sprite.setSpin(0);
+        } else {
+          p.sprite.setSpin(dunkSpin(dunk.def, Math.min(1, dt2 / (0.85 - dunk.def.hang)), r2[5]));
+        }
+      }
     }
 
     // Ball authoritative state from the latest snapshot.
@@ -313,3 +394,11 @@ export class Game {
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function lerp(a, b, t) { return a + (b - a) * t; }
+
+// Spin profile shared by local and remote dunk rendering: ramp in during the
+// middle of the flight so takeoff and the slam itself stay readable.
+function dunkSpin(def, flight, facing) {
+  if (!def.spins) return 0;
+  const ramp = Math.min(1, Math.max(0, (flight - 0.15) / 0.7));
+  return -facing * def.spins * Math.PI * 2 * ramp;
+}

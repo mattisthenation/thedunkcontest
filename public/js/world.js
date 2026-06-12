@@ -195,6 +195,18 @@ export class World {
     rimMesh.name = `rim${side < 0 ? 0 : 1}`;
     g.add(rimMesh);
 
+    // Mounting bracket: neck from the rim's back edge to the backboard face,
+    // plus a small plate where it bolts on.
+    const rimMat = rimMesh.material;
+    const rimBackZ = rim.z + (bz > 0 ? COURT.rimRadius : -COURT.rimRadius);
+    const neckLen = Math.abs(bz) - 0.03 - Math.abs(rimBackZ);
+    const neck = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.09, neckLen + 0.08), rimMat);
+    neck.position.set(rim.x, rim.y - 0.02, (rimBackZ + (bz - Math.sign(bz) * 0.03)) / 2);
+    g.add(neck);
+    const plate = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.3, 0.05), rimMat);
+    plate.position.set(rim.x, rim.y - 0.05, bz - Math.sign(bz) * 0.06);
+    g.add(plate);
+
     // Net: alpha-textured open cylinder.
     const netCanvas = document.createElement('canvas');
     netCanvas.width = 128; netCanvas.height = 64;
