@@ -9,8 +9,8 @@ DNS ─▶ Caddy :443 (TLS, WS) ─▶ node :3000 (systemd, 127.0.0.1) ─▶ da
                                    firewall: only 22 / 80 / 443 open
 ```
 
-Config files referenced below live in [`deploy/`](deploy/). Anywhere you see
-`example.com`, substitute your domain.
+Config files referenced below live in [`deploy/`](deploy/) and are already set
+for **thedunkcontest.com**.
 
 ---
 
@@ -38,7 +38,7 @@ At your domain registrar / DNS host, create records pointing at the reserved IP:
 | A    | `www` | `<reserved-ip>`   |
 
 Both must resolve before Caddy can issue certificates. Check with
-`dig +short example.com`.
+`dig +short thedunkcontest.com`.
 
 ## 3. First login & hardening
 
@@ -90,7 +90,7 @@ sudo mkdir -p /opt/dunkcontest
 sudo chown dunk:dunk /opt/dunkcontest
 sudo -iu dunk
 
-git clone https://github.com/<you>/thedunkcontest.git /opt/dunkcontest
+git clone https://github.com/mattisthenation/thedunkcontest.git /opt/dunkcontest
 cd /opt/dunkcontest
 npm ci --omit=dev      # compiles better-sqlite3; needs the build deps above
 npm test               # sanity check before first boot
@@ -110,16 +110,25 @@ curl -s localhost:3000/api/status     # JSON with rooms + tick times
 The unit binds the app to `127.0.0.1:3000`, restarts it on crash, starts it on
 boot, and gives the SIGTERM stat-flush 10 s on stop.
 
+Let the `dunk` user restart the service without a password (so `deploy.sh`
+works), scoped to *only* that one command:
+
+```bash
+echo 'dunk ALL=(root) NOPASSWD: /usr/bin/systemctl restart dunkcontest' \
+  | sudo tee /etc/sudoers.d/dunk-deploy
+sudo chmod 440 /etc/sudoers.d/dunk-deploy
+```
+
 ## 7. Caddy (TLS + proxy)
 
 ```bash
 sudo cp /opt/dunkcontest/deploy/Caddyfile /etc/caddy/Caddyfile
-sudo sed -i 's/example\.com/your-real-domain.com/g' /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 sudo journalctl -u caddy -n 30        # watch the cert get issued
 ```
 
-Visit `https://your-real-domain.com` — the lobby should load over HTTPS.
+The Caddyfile already targets `thedunkcontest.com`. Visit
+`https://thedunkcontest.com` — the lobby should load over HTTPS.
 
 ## 8. Nightly backups
 
@@ -142,7 +151,7 @@ backups in the panel for a full-disk safety net, ~$2.40/mo.)
 From your laptop, point the bot harness at production:
 
 ```bash
-URL=https://your-real-domain.com node tools/verify.js
+URL=https://thedunkcontest.com node tools/verify.js
 ```
 
 All 12 checks should pass against the live server — proving WebSockets,

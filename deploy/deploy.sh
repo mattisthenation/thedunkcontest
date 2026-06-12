@@ -18,8 +18,8 @@ echo "→ Running tests…"
 npm test
 
 echo "→ Restarting service…"
-sudo systemctl restart dunkcontest
+sudo systemctl restart dunkcontest        # passwordless via /etc/sudoers.d/dunk-deploy
 sleep 1
-sudo systemctl --no-pager --lines=0 status dunkcontest | head -n 4
+systemctl --no-pager --lines=0 status dunkcontest || true
 
 echo "✓ Deployed $(git rev-parse --short HEAD)"
