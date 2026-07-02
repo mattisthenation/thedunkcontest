@@ -7,7 +7,15 @@
 
 thedunkcontest.com {
 	encode zstd gzip
-	reverse_proxy 127.0.0.1:3000
+
+	# The rimverse websocket (second game server, :8081). Everything else —
+	# including the /rimverse/ static client — is served by the v3 app.
+	handle /rimverse/ws {
+		reverse_proxy 127.0.0.1:8081
+	}
+	handle {
+		reverse_proxy 127.0.0.1:3000
+	}
 }
 
 # Send www to the apex so there's one canonical URL.

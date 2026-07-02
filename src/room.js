@@ -8,7 +8,7 @@
 // sendTo(playerId, event, data).
 
 import {
-  COURT, NET, ROOM, PLAYER, BALL, ZONES, ACCURACY, FIRE, DUNKS,
+  COURT, NET, ROOM, PLAYER, BALL, ZONES, ACCURACY, FIRE, WARP, DUNKS,
   STEAL, BLOCK, ANIM, BALL_STATE, dist2D, nearestRim,
 } from '../shared/constants.js';
 
@@ -25,6 +25,13 @@ export class Room {
 
     this.players = new Map();   // playerId -> player
     this.nextPid = 1;
+
+    // SP3 wormhole: combined room score + a per-room HIDDEN threshold (never serialized).
+    // Once combined >= threshold the room is armed; the next dunk is the Universe Collapse.
+    this.combinedScore = 0;
+    this.warpThreshold = WARP.min + Math.floor(this.random() * WARP.span);
+    this.warpArmed = false;
+    this.warping = false; // latch: the collapse fires exactly once
 
     this.ball = this.makeBall({ x: 0, y: BALL.radius, z: 0 });
   }
@@ -354,6 +361,15 @@ export class Room {
       score: p.score, streak: p.consecutiveMakes,
       fire: this.isOnFire(p), ignited,
     });
+
+    // SP3 wormhole: combined score climbs → arm at the hidden threshold → the
+    // next dunk is the Universe Collapse → broadcast one `warp` to the whole room.
+    this.combinedScore += points;
+    if (!this.warpArmed && this.combinedScore >= this.warpThreshold) this.warpArmed = true;
+    if (this.warpArmed && !this.warping && kind === 'dunk') {
+      this.warping = true;
+      this.broadcast('ev', { k: 'warp', pid: p.pid, rim: rimIndex });
+    }
   }
 
   registerMiss(p) {

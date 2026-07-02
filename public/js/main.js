@@ -9,6 +9,7 @@ import { Hud } from './hud.js';
 import { Creator } from './creator.js';
 import { Fx } from './fx.js';
 import { Stage } from './stage.js';
+import { runCollapse, mountRimverse } from './warp.js';
 
 const token = localStorage.dunkToken || (localStorage.dunkToken = crypto.randomUUID());
 
@@ -35,7 +36,28 @@ let inGame = false;
 net.on('net', ({ up }) => {
   hud.setConnection(up);
   // socket.io reconnected: re-run the handshake to restore our session.
-  if (up && inGame) join();
+  // (Suppressed once the warp has started — we now live in the rimverse.)
+  if (up && inGame && !warping) join();
+});
+
+// The Universe Collapse. The server arms the room at a hidden combined-score
+// threshold and broadcasts one `warp` to everyone when the next dunk lands.
+// The rimverse mounts (and connects) in an iframe UNDER the collapse FX; the
+// flash fades out and you're standing in the rimverse. Same page, no redirect.
+let warping = false;
+net.on('warp', () => {
+  if (warping) return;
+  warping = true;
+  inGame = false; // freeze the local game (stops input + sim updates)
+  const frame = mountRimverse(token, localStorage.dunkName || '');
+  Promise.resolve(runCollapse(world))
+    .catch((e) => console.error('collapse FX failed', e))
+    .finally(() => {
+      net.socket.disconnect(); // v3 session over — the rimverse owns the page now
+      const ui = document.getElementById('gameUI');
+      if (ui) ui.style.display = 'none';
+      frame.focus(); // WASD flows into the rimverse
+    });
 });
 
 function renderCourtGrid(courts) {

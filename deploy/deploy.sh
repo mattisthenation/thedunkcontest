@@ -14,12 +14,18 @@ git pull --ff-only
 echo "→ Installing dependencies…"
 npm ci --omit=dev
 
+echo "→ Installing rimverse dependencies…"
+npm --prefix rimverse ci                  # dev deps included: vite builds + tsx runs it
+
 echo "→ Running tests…"
 npm test
 
-echo "→ Restarting service…"
-sudo systemctl restart dunkcontest        # passwordless via /etc/sudoers.d/dunk-deploy
+echo "→ Building rimverse client…"
+npm run build:rimverse
+
+echo "→ Restarting services…"
+sudo systemctl restart dunkcontest rimverse   # passwordless via /etc/sudoers.d/dunk-deploy (add rimverse there)
 sleep 1
-systemctl --no-pager --lines=0 status dunkcontest || true
+systemctl --no-pager --lines=0 status dunkcontest rimverse || true
 
 echo "✓ Deployed $(git rev-parse --short HEAD)"

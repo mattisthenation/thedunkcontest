@@ -1,0 +1,35 @@
+# systemd unit for the RIMVERSE server (the game within The Dunk Contest).
+# Install to /etc/systemd/system/rimverse.service, then:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now rimverse
+# NOTE: /etc/sudoers.d/dunk-deploy must also allow `systemctl restart rimverse`
+# for the passwordless deploy.sh restart (it is currently scoped to dunkcontest).
+
+[Unit]
+Description=RIMVERSE server (the game within The Dunk Contest)
+After=network.target
+
+[Service]
+Type=simple
+User=dunk
+WorkingDirectory=/opt/dunkcontest/rimverse
+Environment=NODE_ENV=production
+Environment=DUNKVERSE_DB=/opt/dunkcontest/data/dunkcontest.db
+# ponytail: tsx runtime in prod matches dev; compile to dist if droplet CPU ever matters
+ExecStart=/usr/bin/npm run start -w @rimverse/server
+
+# Keep it alive; restart on crash with a short backoff.
+Restart=on-failure
+RestartSec=2
+
+KillSignal=SIGTERM
+TimeoutStopSec=10
+
+# Basic hardening, mirroring dunkcontest.service. The DB is opened read-only
+# (v3 is the sole writer) so ProtectSystem=full costs nothing here.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
