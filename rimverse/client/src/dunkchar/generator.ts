@@ -114,11 +114,14 @@ function idleFrames(): Pose[] {
 }
 
 function runFrames(): Pose[] {
-  // 6-frame stride cycle.
+  // 6-frame stride cycle: reach → plant → push-off → trail (heel up) →
+  // recovery (knee folded, foot lifted) → swing-through. Shins trail the
+  // thigh (knees flex backward only) — forward-bent shins kept the recovery
+  // foot at ground level and the run read as a moonwalk (fixed with v3).
   const stride = [
-    { f: [55, 95], b: [-40, 15] }, { f: [25, 50], b: [-15, 25] },
-    { f: [-15, 10], b: [25, 80] }, { f: [-40, 15], b: [55, 95] },
-    { f: [-15, 25], b: [25, 50] }, { f: [25, 80], b: [-15, 10] },
+    { f: [55, 30], b: [-40, -95] }, { f: [25, 15], b: [-15, -75] },
+    { f: [-15, -35], b: [25, -15] }, { f: [-40, -95], b: [55, 30] },
+    { f: [-15, -75], b: [25, 15] }, { f: [25, -15], b: [-15, -35] },
   ];
   return stride.map((s, i) => ({
     crouch: i % 3 === 1 ? 1 : 0, lean: 3,
