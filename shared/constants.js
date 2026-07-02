@@ -92,6 +92,14 @@ export const FIRE = {
   durationMs: 45_000,
 };
 
+// SP3 — the wormhole. The combined room score climbs; at a per-room HIDDEN
+// threshold in [min, min+span-1] the game arms, and the next dunk becomes the
+// Universe Collapse → the whole room warps into the rimverse. Server-authoritative.
+export const WARP = {
+  min: 10,   // brief §5.3: threshold = 10 + floor(rand * 16) → [10, 25]
+  span: 16,
+};
+
 // Dunk choreography. The server treats `ms` as the authoritative timer;
 // clients animate to match (spins = full sprite rotations, extraHeight is
 // added to the arc peak, hang holds at the rim before the drop).

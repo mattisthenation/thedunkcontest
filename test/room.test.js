@@ -312,6 +312,54 @@ test('block: airborne defender near a fresh shot swats it down', () => {
   assert.equal(a.score, 0, 'blocked shot never scores');
 });
 
+test('warp: hidden threshold in [10,25] from injected random', () => {
+  assert.equal(makeRoom({ random: () => 0 }).room.warpThreshold, 10);
+  assert.equal(makeRoom({ random: () => 0.5 }).room.warpThreshold, 18);
+  assert.equal(makeRoom({ random: () => 0.999 }).room.warpThreshold, 25);
+});
+
+test('warp: combined score arms at threshold; the next DUNK fires exactly one warp', () => {
+  const h = makeRoom({ random: () => 0.5 }); // threshold 18
+  const a = join(h.room, 'a');
+  assert.equal(h.room.combinedScore, 0);
+  assert.equal(h.room.warpThreshold, 18);
+
+  h.room.registerMake(a, 2, 'shot');
+  h.room.registerMake(a, 3, 'three');
+  assert.equal(h.room.combinedScore, 5);
+  assert.equal(h.room.warpArmed, false);
+
+  // cross the threshold via non-dunk makes → arms, but no warp yet (waits for a dunk)
+  for (let i = 0; i < 7; i++) h.room.registerMake(a, 2, 'shot'); // +14 → 19 >= 18
+  assert.equal(h.room.warpArmed, true);
+  assert.equal(h.events.filter((e) => e.k === 'warp').length, 0, 'armed, not yet warped');
+
+  // the next dunk is the Universe Collapse → one warp event to the room
+  h.room.registerMake(a, 2, 'dunk');
+  const warps = h.events.filter((e) => e.k === 'warp');
+  assert.equal(warps.length, 1);
+  assert.equal(warps[0].pid, a.pid);
+
+  // latch: further dunks never re-fire the warp
+  h.room.registerMake(a, 2, 'dunk');
+  assert.equal(h.events.filter((e) => e.k === 'warp').length, 1);
+});
+
+test('warp: real dunks through the choreography path fire the collapse once armed', () => {
+  const h = makeRoom({ random: () => 0.5 }); // threshold 18
+  const a = join(h.room, 'a');
+  // Drive real dunks (tryDunk → choreography → registerMake at the live call site).
+  for (let i = 0; i < 12; i++) {
+    a.pos = { x: 0, y: 0, z: -10 }; // in the dunk zone
+    give(h, a);
+    h.room.tryDunk('a');
+    const start = h.events.filter((e) => e.k === 'dunkStart').at(-1);
+    h.advance(start.ms + 100);
+  }
+  assert.ok(h.room.combinedScore >= h.room.warpThreshold, 'combined crossed the threshold');
+  assert.equal(h.events.filter((e) => e.k === 'warp').length, 1, 'exactly one warp via the live dunk path');
+});
+
 test('turbo dunks deal from the flashy tier; normal dunks stay basic-tier', () => {
   const h = makeRoom();
   const a = join(h.room, 'a');
