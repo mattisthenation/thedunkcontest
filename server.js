@@ -24,6 +24,8 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/shared', express.static(path.join(__dirname, 'shared')));
+// The rimverse — the game within the game (built by `npm run build:rimverse`).
+app.use('/rimverse', express.static(path.join(__dirname, 'rimverse', 'client', 'dist')));
 
 const db = process.env.DUNK_NO_DB ? null : openDb();
 const manager = new RoomManager(io, { db });

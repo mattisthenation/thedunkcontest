@@ -75,7 +75,7 @@ export function runCollapse(world) {
  *  bridge: rimverse reads this player's character from the shared DB by token). */
 export function rimverseUrl(token, name, loc = window.location) {
   const dev = loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
-  const base = (typeof window !== 'undefined' && window.RIMVERSE_URL) || (dev ? 'http://localhost:5173/' : '/rimverse/');
+  const base = (typeof window !== 'undefined' && window.RIMVERSE_URL) || (dev ? 'http://localhost:5173/rimverse/' : '/rimverse/');
   const u = new URL(base, loc.href);
   u.searchParams.set('from', 'warp');
   u.searchParams.set('token', token);
