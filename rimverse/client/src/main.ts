@@ -156,5 +156,17 @@ function frame(now: number) {
   scene.render();
 }
 requestAnimationFrame(frame);
-// The lobby gates the join: it mounts over the idle scene and joins the rimverse on PLAY.
-new Lobby({ net, onPlay: (name, court) => net.join(name, court) });
+// The lobby gates the join — EXCEPT when arriving through the warp from The Dunk
+// Contest: then we drop straight into the shared rimverse as the warped identity
+// (Net.token() already adopted the URL token; the server loads the character from
+// the shared DB by token, so the join needs no localStorage character).
+const boot = new URLSearchParams(location.search);
+if (boot.get('from') === 'warp') {
+  const joinRimverse = () => net.join((boot.get('name') ?? 'hooper').slice(0, 16) || 'hooper', 'rimverse');
+  // We join at script load, so the socket may still be CONNECTING (Net.send drops
+  // silently pre-open — the lobby flow never races this, the warp does).
+  if (net.ws.readyState === WebSocket.OPEN) joinRimverse();
+  else net.ws.addEventListener('open', joinRimverse);
+} else {
+  new Lobby({ net, onPlay: (name, court) => net.join(name, court) });
+}

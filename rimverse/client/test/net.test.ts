@@ -89,3 +89,13 @@ describe('Net dunk-contest awareness', () => {
     expect(combined).toBe(7);
   });
 });
+
+describe('Net.token warp override', () => {
+  it('honors a ?token= URL param and persists it', () => {
+    window.history.replaceState({}, '', '/?from=warp&token=warp-tok-123');
+    localStorage.setItem('rimverse-token', 'old-local-token');
+    expect(Net.token()).toBe('warp-tok-123');
+    expect(localStorage.getItem('rimverse-token')).toBe('warp-tok-123');
+    window.history.replaceState({}, '', '/'); // reset for other tests
+  });
+});

@@ -70,9 +70,16 @@ export class Net {
     };
   }
 
-  /** Stable per-browser identity token (arcade-style, no auth). */
+  /** Stable per-browser identity token (arcade-style, no auth).
+   *  A ?token= URL param (the warp hand-off from The Dunk Contest) wins and is
+   *  persisted, so the warped-in identity survives future visits. */
   static token(): string {
     const KEY = 'rimverse-token';
+    const fromUrl = new URLSearchParams(location.search).get('token');
+    if (fromUrl) {
+      localStorage.setItem(KEY, fromUrl);
+      return fromUrl;
+    }
     let t = localStorage.getItem(KEY);
     if (!t) {
       t = crypto.randomUUID();
