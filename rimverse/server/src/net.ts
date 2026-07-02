@@ -90,7 +90,8 @@ export function startNet(
           : (stored?.character ?? DEFAULT_CHARACTER);
         db.upsertIdentity(token, name, character);
         const courtId = typeof (msg as { room?: unknown }).room === 'string' ? (msg as { room: string }).room : 'rucker';
-        const room = rooms.findOrCreateRoom(courtId, 'dunkContest');
+        // 'rimverse' = the shared global rimverse (warp arrivals); anything else = a dunk-contest court.
+        const room = courtId === 'rimverse' ? rooms.rimverse() : rooms.findOrCreateRoom(courtId, 'dunkContest');
         sess.world = room.world;
         const p = room.world.addPlayer(id, name);
         const rim = deriveRimverseAppearance(character);

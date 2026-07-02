@@ -30,6 +30,17 @@ export class RoomManager {
     return room;
   }
 
+  /** The ONE shared global rimverse (locked decision) — created lazily, never reaped,
+   *  capped only by the global MAX_PLAYERS join check in net.ts. Warp arrivals land here. */
+  rimverse(): Room {
+    let room = this.roomsById.get('rimverse');
+    if (!room) {
+      room = { id: 'rimverse', courtId: 'rimverse', world: new World('rimverse'), hadPlayers: false };
+      this.roomsById.set('rimverse', room);
+    }
+    return room;
+  }
+
   get(roomId: string): World | undefined {
     return this.roomsById.get(roomId)?.world;
   }
@@ -43,7 +54,7 @@ export class RoomManager {
   stepAll(): void {
     for (const [id, room] of this.roomsById) {
       if (room.world.players.size > 0) { room.hadPlayers = true; room.world.step(); }
-      else if (room.hadPlayers) this.roomsById.delete(id);
+      else if (room.hadPlayers && id !== 'rimverse') this.roomsById.delete(id);
     }
   }
 }

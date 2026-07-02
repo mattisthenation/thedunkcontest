@@ -37,3 +37,32 @@ describe('RoomManager', () => {
     expect(rm.get('rucker-1')).toBe(r.world); // populated → kept
   });
 });
+
+describe('rimverse room', () => {
+  it('returns one shared rimverse room in rimverse mode', () => {
+    const rm = new RoomManager();
+    const a = rm.rimverse();
+    const b = rm.rimverse();
+    expect(a).toBe(b);
+    expect(a.id).toBe('rimverse');
+    expect(a.world.mode).toBe('rimverse');
+  });
+
+  it('is not capped at the dunk-contest room cap', () => {
+    const rm = new RoomManager();
+    const room = rm.rimverse();
+    for (let i = 0; i < DC_ROOM.cap + 2; i++) room.world.addPlayer(`p${i}`, `P${i}`);
+    expect(rm.rimverse()).toBe(room); // still the same room past DC_ROOM.cap
+    expect(room.world.players.size).toBe(DC_ROOM.cap + 2);
+  });
+
+  it('is stepped and never reaped by stepAll', () => {
+    const rm = new RoomManager();
+    const room = rm.rimverse();
+    room.world.addPlayer('p1', 'P1');
+    rm.stepAll();
+    room.world.removePlayer('p1');
+    rm.stepAll();
+    expect(rm.rimverse()).toBe(room); // dunk rooms reap when empty; the rimverse persists
+  });
+});
