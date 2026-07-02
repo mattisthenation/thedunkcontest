@@ -29,3 +29,5 @@ build/
 data/
 backups/
 .superpowers/
+rimverse/node_modules/
+rimverse/client/dist/
