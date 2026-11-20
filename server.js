@@ -15,6 +15,7 @@ import { openDb } from './src/db.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+app.disable('x-powered-by');
 const server = http.createServer(app);
 const io = new Server(server, {
   // The protocol is small JSON messages at 20Hz; permessage-deflate costs
